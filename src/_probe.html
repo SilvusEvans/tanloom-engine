@@ -29,9 +29,9 @@
     window.__probe = (async () => {
       Blockly.ScratchMsgs.setLocale('zh-cn');
       const ws = Blockly.inject(document.getElementById('w'), {
-        theme: Blockly.Theme.defineTheme('df', { name:'df', blockStyles, componentStyles:{} }),
+        theme: Blockly.Theme.defineTheme('tanloom', { name: 'tanloom', blockStyles, componentStyles:{} }),
         scratchTheme: Blockly.ScratchBlocksTheme.CLASSIC,
-        media: 'df://bundle/node_modules/scratch-blocks/media/',
+        media: 'tanloom://bundle/node_modules/scratch-blocks/media/',
         zoom: { controls:false, wheel:false, startScale:1 }, trashcan:false, sounds:false,
       });
 

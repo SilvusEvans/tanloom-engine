@@ -1,5 +1,5 @@
 /**
- * DualForge — 舞台视口
+ * Tanloom Engine — 舞台视口
  * 用 Canvas 2D 直接画运行时状态。不依赖任何第三方渲染库：
  * 内置矢量形状（box / circle / capsule / triangle / diamond）足够让项目跑起来。
  */

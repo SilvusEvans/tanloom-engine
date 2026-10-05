@@ -1,5 +1,5 @@
 /**
- * DualForge — 应用装配
+ * Tanloom Engine — 应用装配
  * ================================================================
  * 把 IR（唯一真源）、运行时、三个视图（积木 / 代码 / 场景）拼在一起。
  * 任何一处修改都只改 IR，然后由 store 广播变更，各视图重新投影。
@@ -213,15 +213,15 @@ function toggleFullscreen(on) {
     // 让键盘立刻归游戏：焦点还留在「全屏」按钮上的话，空格会把它再点一次
     blurFocus();
     // 原生全屏（浏览器里打开时没有这层能力，忽略即可）
-    if (window.dualforge && window.dualforge.setFullScreen) {
-      window.dualforge.setFullScreen(true).then((v) => setNativeButton(v), () => {});
+    if (window.tanloom && window.tanloom.setFullScreen) {
+      window.tanloom.setFullScreen(true).then((v) => setNativeButton(v), () => {});
     } else if (document.documentElement.requestFullscreen) {
       document.documentElement.requestFullscreen().catch(() => {});
     }
     showFsHint('Esc / 「退出」返回编辑器');
   } else {
-    if (window.dualforge && window.dualforge.setFullScreen) {
-      window.dualforge.setFullScreen(false).then(setNativeButton).catch(() => {});
+    if (window.tanloom && window.tanloom.setFullScreen) {
+      window.tanloom.setFullScreen(false).then(setNativeButton).catch(() => {});
     } else if (document.fullscreenElement && document.exitFullscreen) {
       document.exitFullscreen().catch(() => {});
     }
@@ -314,21 +314,21 @@ let playerPushTimer = 0;
 
 /** 把当前项目推给运行窗口（热重载） */
 function pushToPlayer(delay = 380) {
-  if (!playerOpen || !window.dualforge || !window.dualforge.updatePlayer) return;
+  if (!playerOpen || !window.tanloom || !window.tanloom.updatePlayer) return;
   clearTimeout(playerPushTimer);
   playerPushTimer = setTimeout(() => {
-    window.dualforge.updatePlayer({ text: store.toJSON() }).catch(() => {});
+    window.tanloom.updatePlayer({ text: store.toJSON() }).catch(() => {});
   }, delay);
 }
 
 async function openPlayerWindow() {
-  if (!window.dualforge || !window.dualforge.openPlayer) {
+  if (!window.tanloom || !window.tanloom.openPlayer) {
     toast('当前环境不支持独立窗口（要用 Electron 打开）', 'warn');
     return;
   }
   // 那边是另一份运行时。编辑器这边先停下，免得同一个项目跑出两份各自演化的状态。
   if (rt.isRunning()) { rt.stop(); updateRunButtons(); }
-  const ok = await window.dualforge.openPlayer({
+  const ok = await window.tanloom.openPlayer({
     text: store.toJSON(),
     name: store.project.name,
     stageWidth: store.project.settings.stageWidth,
@@ -346,7 +346,7 @@ function markPlayerClosed() {
 }
 
 $('btn-player').addEventListener('click', () => {
-  if (playerOpen) window.dualforge.closePlayer().catch(() => {});   // 再点一次＝关掉
+  if (playerOpen) window.tanloom.closePlayer().catch(() => {});   // 再点一次＝关掉
   else openPlayerWindow();
 });
 
@@ -356,18 +356,18 @@ $('btn-player').addEventListener('click', () => {
 $('btn-fullscreen').addEventListener('click', () => toggleFullscreen(true));
 $('btn-fs-exit').addEventListener('click', () => toggleFullscreen(false));
 $('btn-fs-native').addEventListener('click', async () => {
-  if (!window.dualforge || !window.dualforge.setFullScreen) {
+  if (!window.tanloom || !window.tanloom.setFullScreen) {
     toast('当前环境不支持切换窗口全屏', 'warn');
     return;
   }
-  const now = await window.dualforge.isFullScreen();
-  setNativeButton(await window.dualforge.setFullScreen(!now));
+  const now = await window.tanloom.isFullScreen();
+  setNativeButton(await window.tanloom.setFullScreen(!now));
 });
 // 主进程那边被系统快捷键（F11 / Win+方向键）改掉时同步一下按钮状态
-if (window.dualforge && window.dualforge.isFullScreen) {
-  window.dualforge.isFullScreen().then(setNativeButton).catch(() => {});
+if (window.tanloom && window.tanloom.isFullScreen) {
+  window.tanloom.isFullScreen().then(setNativeButton).catch(() => {});
   window.addEventListener('resize', () => {
-    window.dualforge.isFullScreen().then(setNativeButton).catch(() => {});
+    window.tanloom.isFullScreen().then(setNativeButton).catch(() => {});
   });
 }
 
@@ -383,19 +383,19 @@ $('btn-export').addEventListener('click', exportCode);
 
 async function saveProject() {
   const text = store.toJSON();
-  if (window.dualforge && window.dualforge.isElectron) {
-    const r = await window.dualforge.saveProject({ filePath: savePath, text, suggestedName: store.project.name });
+  if (window.tanloom && window.tanloom.isElectron) {
+    const r = await window.tanloom.saveProject({ filePath: savePath, text, suggestedName: store.project.name });
     if (r && r.path) { savePath = r.path; toast('已保存到 ' + r.path, 'ok'); }
   } else {
-    download(`${store.project.name}.dfp`, text);
+    download(`${store.project.name}.tle`, text);
     toast('已下载项目文件', 'ok');
   }
 }
 
 async function openProject() {
   let text = null, path = null;
-  if (window.dualforge && window.dualforge.isElectron) {
-    const r = await window.dualforge.openProject();
+  if (window.tanloom && window.tanloom.isElectron) {
+    const r = await window.tanloom.openProject();
     if (r) { text = r.text; path = r.path; }
   } else {
     text = await pickFile();
@@ -415,8 +415,8 @@ async function openProject() {
 
 async function exportCode() {
   const files = generateFiles(store.project).filter((f) => !f.readonly);
-  if (window.dualforge && window.dualforge.isElectron) {
-    const r = await window.dualforge.exportCode({ suggestedName: store.project.name, files });
+  if (window.tanloom && window.tanloom.isElectron) {
+    const r = await window.tanloom.exportCode({ suggestedName: store.project.name, files });
     if (r) toast('代码已导出到 ' + r.path, 'ok');
   } else {
     for (const f of files) download(f.name, f.text);
@@ -437,7 +437,7 @@ function pickFile() {
   return new Promise((resolve) => {
     const i = document.createElement('input');
     i.type = 'file';
-    i.accept = '.dfp,.json';
+    i.accept = '.tle,.json';
     i.addEventListener('change', () => {
       const f = i.files[0];
       if (!f) return resolve(null);
@@ -456,7 +456,7 @@ $('btn-help').addEventListener('click', () => {
   const body = document.createElement('div');
   body.innerHTML = `
     <div class="hint">
-      <b>DualForge</b> —— 画得出，也写得出。积木和代码共享同一份 IR，不是两套实现。<br><br>
+      <b>Tanloom Engine</b> —— 画得出，也写得出。积木和代码共享同一份 IR，不是两套实现。<br><br>
       <b>积木视图</b>：用 Scratch 官方渲染器（scratch-blocks 2.1.27），
       积木形状、配色、拖拽吸附、插入标记都和在 Scratch 里一模一样。
       左侧选分类挑积木，拖到画布上会吸附进插槽；拖到右下角垃圾桶＝删除；
@@ -478,7 +478,7 @@ $('btn-help').addEventListener('click', () => {
       外观只影响编辑器界面，<b>不写进项目文件</b> —— 换台机器打开同一个游戏，皮肤各随各的。<br>
       <b>快捷键</b>：F5 运行/停止 · F6 独立窗口运行 · F11 全屏 · Esc 退出全屏 · Ctrl+, 外观 · Ctrl+Z 撤销 · Ctrl+Y 重做 · Ctrl+S 保存（代码视图里是同步回积木）· Ctrl+E 导出代码
     </div>`;
-  showModal({ title: '帮助 · DualForge', body, okText: '知道了', cancelText: '关闭' });
+  showModal({ title: '帮助 · Tanloom Engine', body, okText: '知道了', cancelText: '关闭' });
 });
 
 document.addEventListener('keydown', (e) => {
@@ -560,7 +560,7 @@ function boot() {
   $('btn-ws-fit').addEventListener('click', () => ws.zoomToFit());
   $('btn-appearance').addEventListener('click', () => openAppearanceDialog(appearance));
 
-  rt.log('DualForge 已就绪 · 点 ▶ 运行示例项目', 'ok');
+  rt.log('Tanloom Engine 已就绪 · 点 ▶ 运行示例项目', 'ok');
   fillEntitySelect();
   ws.showEntity(store.selectedEntityId);
   selectEntity(store.selectedEntityId);
@@ -573,15 +573,15 @@ function boot() {
   requestAnimationFrame(draw);
 
   // 运行窗口的状态：关掉时把按钮的高亮还回来
-  if (window.dualforge && window.dualforge.onPlayerClosed) {
-    window.dualforge.onPlayerClosed(() => {
+  if (window.tanloom && window.tanloom.onPlayerClosed) {
+    window.tanloom.onPlayerClosed(() => {
       if (!playerOpen) return;
       markPlayerClosed();
       toast('运行窗口已关闭', 'info');
     });
   }
-  if (window.dualforge && window.dualforge.playerStatus) {
-    window.dualforge.playerStatus().then((open) => {
+  if (window.tanloom && window.tanloom.playerStatus) {
+    window.tanloom.playerStatus().then((open) => {
       if (open) { playerOpen = true; $('btn-player').classList.add('on'); }
     }).catch(() => {});
   }
@@ -589,8 +589,8 @@ function boot() {
   // 调试出口（开发者工具里可直接摸到内部状态）
   // blockdefs / scratchDefs / scratchSync 也挂出来：冒烟测试里的「每个积木都能
   // 渲染成真积木（不是 ⚠ 未识别）」要在真渲染器环境里跑，而这条链路
-  // （IR 节点 → nodeToXml）在纯 Node 里 import 不了（scratch-blocks 走 df:// 协议）。
-  window.__df = {
+  // （IR 节点 → nodeToXml）在纯 Node 里 import 不了（scratch-blocks 走 tanloom:// 协议）。
+  window.__tl = {
     store, rt, ws, editor, stageView, stageViewBig, stageViewFs, appearance,
     blockdefs, scratchDefs, scratchSync,
     generateFiles, Blockly, toggleFullscreen, openPlayerWindow,

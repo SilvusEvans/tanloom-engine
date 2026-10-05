@@ -1,5 +1,5 @@
 /**
- * DualForge — 积木主题
+ * Tanloom Engine — 积木主题
  * ================================================================
  * scratch-blocks 的每一块积木都靠 style 取色（colorPrimary / Secondary /
  * Tertiary），主题里少一个 style 就会在注入时直接抛
@@ -77,8 +77,8 @@ export function buildTheme(project) {
     blockStyles[id] = blockStyles[id] || { colourPrimary: '#FF8C1A', colourSecondary: '#FF8000', colourTertiary: '#DB6E00' };
   }
 
-  return Blockly.Theme.defineTheme('dualforge', {
-    name: 'DualForge',
+  return Blockly.Theme.defineTheme('tanloom', {
+    name: 'Tanloom Engine',
     blockStyles,
     componentStyles: {
       // 工作区保持 Scratch 那样的浅色 —— 积木的明暗关系是按浅底设计的，

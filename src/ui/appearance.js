@@ -1,11 +1,11 @@
 /**
- * DualForge — 外观：编辑器主题色 / 字体族 / 字号
+ * Tanloom Engine — 外观：编辑器主题色 / 字体族 / 字号
  * ================================================================
  * 只影响「编辑器界面」，不进项目文件 —— 换台机器打开同一个游戏，
  * 存档还是存档，皮肤各随各的。
  *
  * 做法：把选择结果编译成一份 `:root` 变量覆盖，写进 head 末尾的
- * <style id="df-appearance">。所有视图都读同一组变量，所以一处生效、
+ * <style id="tl-appearance">。所有视图都读同一组变量，所以一处生效、
  * 全屏跟随，各视图不需要各自响应主题变化。
  *
  * 约定：样式表里不许再写死颜色，也不许再写死字号。
@@ -18,7 +18,7 @@
 import { showModal, hint, toast } from './dialogs.js';
 import { highlight } from '../code/editor.js';
 
-const KEY = 'df.appearance.v1';
+const KEY = 'tl.appearance.v1';
 const FORMAT = 2;   // 分享码格式版本
 
 /* ------------------------------------------------------------------ */
@@ -398,10 +398,10 @@ export class Appearance {
   }
 
   apply() {
-    let el = document.getElementById('df-appearance');
+    let el = document.getElementById('tanloom-appearance');
     if (!el) {
       el = document.createElement('style');
-      el.id = 'df-appearance';
+      el.id = 'tanloom-appearance';
       // 追加在 head 末尾：和 base.css 的 :root 同特异性，靠后者胜出
       document.head.appendChild(el);
     }
@@ -533,8 +533,8 @@ export function openAppearanceDialog(app) {
   pre.innerHTML = highlight([
     '// @on update',
     'const speed = 3.5;',
-    'df.move(speed, 0);   // 注释',
-    "if (vars.hp <= 0) df.broadcast('game over');",
+    'tl.move(speed, 0);   // 注释',
+    "if (vars.hp <= 0) tl.broadcast('game over');",
   ].join('\n'));
   pSec.appendChild(pre);
   body.appendChild(pSec);

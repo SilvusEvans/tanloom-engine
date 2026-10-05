@@ -1,4 +1,4 @@
-# DualForge · 双模游戏引擎
+# Tanloom Engine · 双模游戏引擎
 
 > **画得出，也写得出。** 图形化积木与代码编程不是两个引擎，而是同一份项目数据的两个视图。
 
@@ -145,17 +145,17 @@ node_modules/scratch-blocks  →  scratch-blocks 2.1.27（Blockly 内核 + Scrat
 生成的代码是**人能读、人能改**的受限 TypeScript 子集：
 
 ```ts
-// @df:script script_x8f2
+// @tl:script script_x8f2
 // @on update
 export async function onUpdate(ctx: FrameCtx) {
   const self = ctx.self;
   self.vx = 0;
-  if (df.keyDown("ArrowLeft")) { self.vx = (-(vars.速度)); self.dir = -90; }
-  if (df.keyDown("Space") && (self.vy < 1)) { df.jump(self, ((3 * 3) * 48)); }
+  if (tl.keyDown("ArrowLeft")) { self.vx = (-(vars.速度)); self.dir = -90; }
+  if (tl.keyDown("Space") && (self.vy < 1)) { tl.jump(self, ((3 * 3) * 48)); }
 }
 ```
 
-- 在代码视图按 **Ctrl+S** → 解析回积木（注解是锚点，`// @df:script <id>` 保证脚本身份不丢）
+- 在代码视图按 **Ctrl+S** → 解析回积木（注解是锚点，`// @tl:script <id>` 保证脚本身份不丢）
 - 认识不了的写法**降级为「代码积木」原样保留**，所以往返永远无损
 - 两边都改过会弹出冲突条：以代码为准 / 以积木为准
 
@@ -245,7 +245,7 @@ Blockly.reportValue(blockId, text)
 
 1. **编辑器被舞台整个盖住**（`.fullscreen-layer`，一块独立的画布）；
 2. **窗口真的占满屏幕**，连标题栏一起去掉 —— 这个只能主进程做，
-   走 IPC `df:set-fullscreen`（`ipc.cjs`）。
+   走 IPC `tl:set-fullscreen`（`ipc.cjs`）。
 
 进来时如果还没在运行，会顺带按一次「运行」—— 全屏就是「开始玩」的意思。
 `Esc` 或「✕ 退出」返回编辑器（对话框开着时 Esc 先关对话框）。
@@ -277,7 +277,7 @@ Blockly.reportValue(blockId, text)
 - 工具条（重来 / 暂停 / 全屏 / 关闭）平时半透明，鼠标移上去才亮；`Esc` 也能关窗。
 - 键盘走和编辑器同一个输入层，所以窗口开着就能玩。
 
-> 窗口是主进程建的，`df://app/player.html` 走的是同一个自定义协议；
+> 窗口是主进程建的，`tanloom://app/player.html` 走的是同一个自定义协议；
 > 跨进程这条链路用 `tools/probe-player.cjs` 端到端验（开窗 / 在跑 / 键盘驱动角色 /
 > 热重载 / 关窗后按钮复位），因为**只看截图看不出对错**。
 
@@ -328,7 +328,7 @@ Blockly.reportValue(blockId, text)
 做法是**编译成一份 `:root` 变量覆盖**，追加在 `<head>` 末尾：
 
 ```
-appearance.js  ──编译──→  <style id="df-appearance">:root{ --panel: …; --ui: …; --ui-scale: …; }
+appearance.js  ──编译──→  <style id="tl-appearance">:root{ --panel: …; --ui: …; --ui-scale: …; }
 ```
 
 - 和 `base.css` 的 `:root` **同特异性、后出现者胜**，所以不用 `!important`，也不用挨个改元素。
@@ -342,7 +342,7 @@ appearance.js  ──编译──→  <style id="df-appearance">:root{ --panel: 
 
 | 边界 | 为什么 |
 |---|---|
-| **不写进项目文件**（只存 localStorage，`df.appearance.v1`） | 换台机器打开同一个游戏，存档还是存档，皮肤各随各的 |
+| **不写进项目文件**（只存 localStorage，`tl.appearance.v1`） | 换台机器打开同一个游戏，存档还是存档，皮肤各随各的 |
 | **积木颜色不跟主题** | 那是 Scratch 官方分类色，`theme.js` 里是定值 —— 要和 Scratch 长得一样 |
 | **全屏层 / 独立运行窗口保持深色** | 那是游戏画面，不是编辑器界面（`fullscreen.css` 连字号都不跟） |
 | **自定义重点色必须自动配字色** | 挑到浅黄、浅绿时白字会看不见，所以 `--on-accent` 按 BT.601 亮度算 |
@@ -368,10 +368,10 @@ appearance.js  ──编译──→  <style id="df-appearance">:root{ --panel: 
 ## 目录
 
 ```
-dualforge/
+tanloom-engine/
 ├── main.cjs                  Electron 主进程（窗口 + 菜单）
 ├── ipc.cjs                   主进程 IPC：独立运行窗口 / 全屏 / 打开 / 保存 / 导出代码
-├── app-protocol.cjs          df:// 自定义协议（见下方「离线说明」）
+├── app-protocol.cjs          tanloom:// 自定义协议（见下方「离线说明」）
 ├── preload.cjs               contextBridge 桥接
 ├── src/
 │   ├── index.html
@@ -418,7 +418,7 @@ dualforge/
 2. **环境变量 `ELECTRON_RUN_AS_NODE=1` 必须删掉**（不是置空）。
    带着它 `electron.exe` 会退化成普通 Node 进程。启动器已经处理。
 
-另外：静态资源走 **`df://` 自定义协议**由主进程直接读盘返回，不起本地 HTTP 服务。
+另外：静态资源走 **`tanloom://` 自定义协议**由主进程直接读盘返回，不起本地 HTTP 服务。
 原因是本机存在 `http_proxy` 环境变量，Chromium 会把 `127.0.0.1` 也丢给代理，导致
 `ERR_CONNECTION_TIMED_OUT`。自定义协议不经过网络栈，端口、代理、防火墙都影响不到它。
 
@@ -426,10 +426,10 @@ dualforge/
 
 | host | 指向 | 用途 |
 |---|---|---|
-| `df://app/` | `src/` | 编辑器本体 |
-| `df://bundle/` | 工程根目录 | `node_modules/scratch-blocks`（渲染器 + media） |
+| `tanloom://app/` | `src/` | 编辑器本体 |
+| `tanloom://bundle/` | 工程根目录 | `node_modules/scratch-blocks`（渲染器 + media） |
 
-因为两者不同源，`index.html` 的 CSP 里显式放行了 `df://bundle`
+因为两者不同源，`index.html` 的 CSP 里显式放行了 `tanloom://bundle`
 （否则渲染器会被 CSP 拦掉，积木整个不出来）。
 
 3. **scratch-blocks 是离线放进来的**：本机访问不了 registry，所以

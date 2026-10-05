@@ -1,5 +1,5 @@
 /**
- * DualForge — 代码 → IR 反向解析
+ * Tanloom Engine — 代码 → IR 反向解析
  * ================================================================
  * 只解析 codegen 生成的「受限 TypeScript 子集」。
  * 关键设计：遇到不认识的语句/表达式时，降级成「代码积木」(CodeBlock)，
@@ -389,8 +389,8 @@ function entityRefFromAst(n, P) {
   if (n.k === 'id' && (n.name === 'self' || n.name === 'ctx.self')) return '$self';
   if (n.k === 'member' && n.obj.k === 'id' && n.obj.name === 'ctx' && n.prop === 'self') return '$self';
   const cn = n.k === 'call' ? calleeName(n.callee) : calleeName(n);
-  if (cn === 'df.entity' && n.args && n.args[0] && n.args[0].k === 'str') return n.args[0].v;
-  if (cn === 'df.entity' && n.args && n.args[0] && n.args[0].k === 'id') return n.args[0].name;
+  if (cn === 'tl.entity' && n.args && n.args[0] && n.args[0].k === 'str') return n.args[0].v;
+  if (cn === 'tl.entity' && n.args && n.args[0] && n.args[0].k === 'id') return n.args[0].name;
   return null;
 }
 
@@ -473,10 +473,10 @@ function memberToIR(n, P, ctx) {
     if (o === 'vars' && n.index.k === 'str') return { type: 'VarRef', name: n.index.v };
     if (o === 'lists' && n.index.k === 'str') return { type: 'ListRef', name: n.index.v };
   }
-  // df.entity("名").x
+  // tl.entity("名").x
   if (n.k === 'member' && n.obj.k === 'call') {
     const cn = calleeName(n.obj.callee || n.obj);
-    if (cn === 'df.entity' && n.obj.args[0] && n.obj.args[0].k === 'str') {
+    if (cn === 'tl.entity' && n.obj.args[0] && n.obj.args[0].k === 'str') {
       return { type: 'GetProp', entity: n.obj.args[0].v, prop: n.prop };
     }
   }
@@ -502,33 +502,33 @@ function callToIR(n, P, ctx) {
   if (MATH_MAP[cn]) return { type: 'MathOp', op: MATH_MAP[cn], x: A(0) };
 
   switch (cn) {
-    case 'df.random': return { type: 'Random', from: A(0), to: A(1) };
-    case 'df.math': return { type: 'MathOp', op: S(0) || 'abs', x: A(1) };
-    case 'df.join': return { type: 'Join', a: A(0), b: A(1) };
-    case 'df.letterOf': return { type: 'LetterOf', a: A(0), i: A(1) };
-    case 'df.lengthOf': return { type: 'LengthOf', a: A(0) };
-    case 'df.contains': return { type: 'Contains', a: A(0), b: A(1) };
-    case 'df.touching': {
+    case 'tl.random': return { type: 'Random', from: A(0), to: A(1) };
+    case 'tl.math': return { type: 'MathOp', op: S(0) || 'abs', x: A(1) };
+    case 'tl.join': return { type: 'Join', a: A(0), b: A(1) };
+    case 'tl.letterOf': return { type: 'LetterOf', a: A(0), i: A(1) };
+    case 'tl.lengthOf': return { type: 'LengthOf', a: A(0) };
+    case 'tl.contains': return { type: 'Contains', a: A(0), b: A(1) };
+    case 'tl.touching': {
       const off = n.args.length >= 3 && n.args[0].k === 'id' && n.args[0].name === 'ctx' ? 1 : 0;
       const a = entityRefFromAst(n.args[off], P) || '$self';
       const b = entityRefFromAst(n.args[off + 1], P) || '$self';
       return { type: 'Touching', a, b };
     }
-    case 'df.distanceTo': {
+    case 'tl.distanceTo': {
       const a = entityRefFromAst(n.args[0], P) || '$self';
       const b = entityRefFromAst(n.args[1], P) || '$self';
       return { type: 'DistanceTo', a, b };
     }
-    case 'df.keyDown': return { type: 'KeyDown', key: S(0) || 'Space' };
-    case 'df.mouseDown': return { type: 'MouseDown' };
-    case 'df.mouseX': return { type: 'MouseX' };
-    case 'df.mouseY': return { type: 'MouseY' };
-    case 'df.timer': return { type: 'Timer' };
-    case 'df.sceneName': return { type: 'CurrentScene' };
-    case 'df.cloneCount': return { type: 'CloneCount' };
-    case 'df.listIndex': return { type: 'ListIndex', list: S(0) || '存档点', v: A(1) };
-    case 'df.listContains': return { type: 'ListContains', list: S(0) || '存档点', v: A(1) };
-    case 'df.var': return { type: 'VarRef', name: S(0) || '' };
+    case 'tl.keyDown': return { type: 'KeyDown', key: S(0) || 'Space' };
+    case 'tl.mouseDown': return { type: 'MouseDown' };
+    case 'tl.mouseX': return { type: 'MouseX' };
+    case 'tl.mouseY': return { type: 'MouseY' };
+    case 'tl.timer': return { type: 'Timer' };
+    case 'tl.sceneName': return { type: 'CurrentScene' };
+    case 'tl.cloneCount': return { type: 'CloneCount' };
+    case 'tl.listIndex': return { type: 'ListIndex', list: S(0) || '存档点', v: A(1) };
+    case 'tl.listContains': return { type: 'ListContains', list: S(0) || '存档点', v: A(1) };
+    case 'tl.var': return { type: 'VarRef', name: S(0) || '' };
     default: break;
   }
 
@@ -553,9 +553,9 @@ function stmtToIR(s, P, ctx) {
     case 'await': {
       const v = s.value;
       const cn = v.k === 'call' ? calleeName(v.callee) : null;
-      if (cn === 'df.wait') return { type: 'Wait', sec: astToIR(v.args[0], P, ctx) };
-      if (cn === 'df.tick') return { __skip: true };
-      if (cn === 'df.broadcastAndWait') {
+      if (cn === 'tl.wait') return { type: 'Wait', sec: astToIR(v.args[0], P, ctx) };
+      if (cn === 'tl.tick') return { __skip: true };
+      if (cn === 'tl.broadcastAndWait') {
         return {
           type: 'BroadcastAndWait', channel: (v.args[0] && v.args[0].k === 'str') ? v.args[0].v : 'update',
           value: astToIR(v.args[1], P, ctx), body: seq()
@@ -701,7 +701,7 @@ function assignToIR(e, P, ctx) {
     }
   }
 
-  // 其他实体的属性赋值：df.entity("x").y = ...
+  // 其他实体的属性赋值：tl.entity("x").y = ...
   // 这一支以前只认 dir / size / opacity / visible，于是「别的实体」上的
   // 增加坐标、旋转、换动画、换颜色都会变成通用的「把属性设为」——
   // 类型都不一样，积木形状自然也对不上。下面把这几条补齐。
@@ -744,45 +744,45 @@ function callStmtToIR(e, s, P, ctx) {
   const entAt = (i) => entityRefFromAst(e.args[i], P) || '$self';
 
   switch (cn) {
-    case 'df.setPosition': return { type: 'SetPosition', entity: entAt(0), x: A(1), y: A(2) };
-    case 'df.moveBy': return { type: 'MoveBy', entity: entAt(0), dx: A(1), dy: A(2) };
-    case 'df.setVelocity': return { type: 'SetVelocity', entity: entAt(0), vx: A(1), vy: A(2) };
-    case 'df.jump': return { type: 'Jump', entity: entAt(0), power: A(1) };
-    case 'df.setGravity': return { type: 'SetGravity', entity: entAt(0), g: A(1) };
-    case 'df.bounce': return { type: 'BounceOnEdge', entity: entAt(0) };
-    case 'df.clone': return { type: 'Clone', entity: entAt(0) };
-    case 'df.deleteClone': return { type: 'DeleteClone' };
-    case 'df.spawn': return { type: 'SpawnEntity', entity: S(0) || '', x: A(1), y: A(2) };
-    case 'df.destroy': return { type: 'DestroyEntity', entity: entAt(0) };
-    case 'df.broadcast': return { type: 'Broadcast', channel: S(0) || 'update', value: A(1) };
-    case 'df.playSound': return { type: 'PlaySound', name: S(0) || 'beep' };
-    case 'df.stopAllSounds': return { type: 'StopAllSounds' };
-    case 'df.volume': {
+    case 'tl.setPosition': return { type: 'SetPosition', entity: entAt(0), x: A(1), y: A(2) };
+    case 'tl.moveBy': return { type: 'MoveBy', entity: entAt(0), dx: A(1), dy: A(2) };
+    case 'tl.setVelocity': return { type: 'SetVelocity', entity: entAt(0), vx: A(1), vy: A(2) };
+    case 'tl.jump': return { type: 'Jump', entity: entAt(0), power: A(1) };
+    case 'tl.setGravity': return { type: 'SetGravity', entity: entAt(0), g: A(1) };
+    case 'tl.bounce': return { type: 'BounceOnEdge', entity: entAt(0) };
+    case 'tl.clone': return { type: 'Clone', entity: entAt(0) };
+    case 'tl.deleteClone': return { type: 'DeleteClone' };
+    case 'tl.spawn': return { type: 'SpawnEntity', entity: S(0) || '', x: A(1), y: A(2) };
+    case 'tl.destroy': return { type: 'DestroyEntity', entity: entAt(0) };
+    case 'tl.broadcast': return { type: 'Broadcast', channel: S(0) || 'update', value: A(1) };
+    case 'tl.playSound': return { type: 'PlaySound', name: S(0) || 'beep' };
+    case 'tl.stopAllSounds': return { type: 'StopAllSounds' };
+    case 'tl.volume': {
       const a = e.args[0];
       if (a && a.k === 'bin' && a.op === '/' && a.r.k === 'num' && a.r.v === 100) return { type: 'SetVolume', v: astToIR(a.l, P, ctx) };
       return { type: 'SetVolume', v: { type: 'BinaryOp', op: '*', left: A(0), right: E.num(100) } };
     }
-    case 'df.resetTimer': return { type: 'ResetTimer' };
-    case 'df.monitor': return S(0) && S(0).startsWith('list:')
+    case 'tl.resetTimer': return { type: 'ResetTimer' };
+    case 'tl.monitor': return S(0) && S(0).startsWith('list:')
       ? { type: (e.args[1].k === 'bool' && e.args[1].v) ? 'ListShow' : 'ListHide', list: S(0).slice(5) }
       : { type: (e.args[1] && e.args[1].k === 'bool' && e.args[1].v) ? 'ShowVar' : 'HideVar', name: S(0) || '' };
-    case 'df.say': return { type: 'Say', entity: entAt(0), text: A(1), sec: A(2) };
-    case 'df.hud': return { type: 'UISetText', text: A(0) };
-    case 'df.shake': return { type: 'ShakeScreen', n: A(0) };
-    case 'df.particles': return { type: 'EmitParticles', entity: entAt(0), n: A(1), color: S(2) || '#FFD500' };
-    case 'df.cameraFollow': return { type: 'CameraFollow', entity: entAt(0), k: A(1) };
-    case 'df.switchScene': return { type: 'SwitchScene', name: A(0) };
-    case 'df.save': return { type: 'SaveGame', slot: A(0) };
-    case 'df.load': return { type: 'LoadGame', slot: A(0) };
-    case 'df.stop': return { type: 'StopScripts', target: S(0) || 'all' };
-    case 'df.setSubscribed': {
+    case 'tl.say': return { type: 'Say', entity: entAt(0), text: A(1), sec: A(2) };
+    case 'tl.hud': return { type: 'UISetText', text: A(0) };
+    case 'tl.shake': return { type: 'ShakeScreen', n: A(0) };
+    case 'tl.particles': return { type: 'EmitParticles', entity: entAt(0), n: A(1), color: S(2) || '#FFD500' };
+    case 'tl.cameraFollow': return { type: 'CameraFollow', entity: entAt(0), k: A(1) };
+    case 'tl.switchScene': return { type: 'SwitchScene', name: A(0) };
+    case 'tl.save': return { type: 'SaveGame', slot: A(0) };
+    case 'tl.load': return { type: 'LoadGame', slot: A(0) };
+    case 'tl.stop': return { type: 'StopScripts', target: S(0) || 'all' };
+    case 'tl.setSubscribed': {
       // 第二个参数生成的是 true / false 字面量。写成别的（变量、表达式）就映射不回来，
       // 那就降级成代码积木原样保留 —— 不丢信息是硬规矩。
       const flag = e.args[1];
       if (!flag || flag.k !== 'bool') return codeStmt(e, P);
       return { type: 'SetSubscribed', channel: S(0) || 'update', state: flag.v ? 'subscribe' : 'unsubscribe' };
     }
-    case 'df.setProp': return { type: 'SetProp', entity: entAt(0), prop: S(1) || 'x', value: A(2) };
+    case 'tl.setProp': return { type: 'SetProp', entity: entAt(0), prop: S(1) || 'x', value: A(2) };
     default: break;
   }
 
@@ -859,9 +859,9 @@ function parseAnnotations(commentBlock) {
     } else if (key === 'macro') {
       const mm = rest.match(/^(.+?)\(([^)]*)\)\s*(?:=>\s*(.*))?$/);
       if (mm) a.macro = { name: mm[1].trim(), params: mm[2].split(',').map((s) => s.trim()).filter(Boolean), inline: mm[3] ? mm[3].trim() : null };
-    } else if (key === 'df:script') {
+    } else if (key === 'tl:script') {
       a.scriptId = rest;
-    } else if (key === 'df:macro') {
+    } else if (key === 'tl:macro') {
       a.macroId = rest;
     } else if (['display', 'category', 'color', 'icon', 'scope', 'codegen', 'native', 'name', 'kind'].includes(key)) {
       a[key] = rest;

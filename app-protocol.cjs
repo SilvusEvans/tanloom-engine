@@ -1,12 +1,12 @@
 'use strict';
 /**
- * DualForge — 自定义协议
+ * Tanloom Engine — 自定义协议
  * ================================================================
  * 编辑器是 ES module 结构，file:// 下会被 CORS 拦掉，所以需要「像 http 一样」
  * 的加载方式。常见的做法是起一个本地 http 服务器，但那样会受系统代理、
  * 防火墙、端口占用的影响（本机就因为 http_proxy 环境变量直接超时了）。
  *
- * 这里改用 Electron 的自定义协议 df://，由主进程直接从磁盘读文件返回，
+ * 这里改用 Electron 的自定义协议 tanloom://，由主进程直接从磁盘读文件返回，
  * 不经过任何网络栈 —— 没有端口、没有代理、没有超时。
  */
 
@@ -14,7 +14,7 @@ const { protocol, net } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
-const SCHEME = 'df';
+const SCHEME = 'tanloom';
 const HOST = 'app';
 // 第二个 host：把工程根目录也暴露出来，这样渲染进程能加载 node_modules 里的
 // scratch-blocks（官方渲染器 + media 资源），不用把它们复制进 src。
@@ -55,8 +55,8 @@ function registerScheme() {
 
 /**
  * 在 app ready 之后调用。
- * @param {string} rootDir  index.html 所在目录（df://app/）
- * @param {string} [bundleDir] 工程根目录（df://bundle/），用于加载 node_modules
+ * @param {string} rootDir  index.html 所在目录（tanloom://app/）
+ * @param {string} [bundleDir] 工程根目录（tanloom://bundle/），用于加载 node_modules
  */
 function installHandler(rootDir, bundleDir) {
   const roots = {

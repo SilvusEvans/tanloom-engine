@@ -54,7 +54,7 @@ function openPlayerWindow(payload) {
   playerProject = payload.text || null;
   if (playerWindow && !playerWindow.isDestroyed()) {
     playerWindow.focus();
-    if (playerProject) playerWindow.webContents.send('df:player-project', playerProject);
+    if (playerProject) playerWindow.webContents.send('tl:player-project', playerProject);
     return true;
   }
   const size = playerSize(payload);
@@ -65,7 +65,7 @@ function openPlayerWindow(payload) {
     minHeight: 220,
     show: false,
     backgroundColor: '#05070b',
-    title: ((payload.name || 'DualForge') + ' · 运行'),
+    title: ((payload.name || 'Tanloom Engine') + ' · 运行'),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -80,7 +80,7 @@ function openPlayerWindow(payload) {
   playerWindow.on('closed', () => {
     playerWindow = null;
     playerProject = null;
-    notifyEditors('df:player-closed');
+    notifyEditors('tl:player-closed');
   });
   playerWindow.loadURL(PLAYER_URL);
   return true;
@@ -90,7 +90,7 @@ function registerIpc() {
   // ---- 全屏游玩 ----
   // 渲染进程的「全屏游玩」是两层：一层是盖住编辑器的舞台层，
   // 另一层是真的让窗口占满屏幕（连标题栏一起去掉）。后者只能主进程做。
-  ipcMain.handle('df:set-fullscreen', (e, on) => {
+  ipcMain.handle('tl:set-fullscreen', (e, on) => {
     const win = BrowserWindow.fromWebContents(e.sender);
     if (!win) return false;
     const want = !!on;
@@ -98,40 +98,40 @@ function registerIpc() {
     return win.isFullScreen();
   });
 
-  ipcMain.handle('df:get-fullscreen', (e) => {
+  ipcMain.handle('tl:get-fullscreen', (e) => {
     const win = BrowserWindow.fromWebContents(e.sender);
     return win ? win.isFullScreen() : false;
   });
 
   // ---- 独立运行窗口 ----
-  ipcMain.handle('df:player-open', (_e, payload) => openPlayerWindow(payload || {}));
+  ipcMain.handle('tl:player-open', (_e, payload) => openPlayerWindow(payload || {}));
 
   // 编辑器改动 → 推给运行窗口（热重载）
-  ipcMain.handle('df:player-update', (_e, payload) => {
+  ipcMain.handle('tl:player-update', (_e, payload) => {
     playerProject = (payload && payload.text) || playerProject;
     if (!playerWindow || playerWindow.isDestroyed()) return false;
     if (playerProject) {
-      try { playerWindow.webContents.send('df:player-project', playerProject); } catch { return false; }
+      try { playerWindow.webContents.send('tl:player-project', playerProject); } catch { return false; }
     }
     return true;
   });
 
-  ipcMain.handle('df:player-close', () => {
+  ipcMain.handle('tl:player-close', () => {
     if (playerWindow && !playerWindow.isDestroyed()) playerWindow.close();
     return true;
   });
 
-  ipcMain.handle('df:player-status', () => !!playerWindow && !playerWindow.isDestroyed());
+  ipcMain.handle('tl:player-status', () => !!playerWindow && !playerWindow.isDestroyed());
 
-  ipcMain.handle('df:player-get-project', () => playerProject);
+  ipcMain.handle('tl:player-get-project', () => playerProject);
 
   // ---- 项目文件：打开 / 保存 / 导出 ----
   const owner = (e) => BrowserWindow.fromWebContents(e.sender) || undefined;
 
-  ipcMain.handle('df:open-project', async (e) => {
+  ipcMain.handle('tl:open-project', async (e) => {
     const r = await dialog.showOpenDialog(owner(e), {
-      title: '打开 DualForge 项目',
-      filters: [{ name: 'DualForge Project', extensions: ['dfp', 'json'] }],
+      title: '打开 Tanloom Engine 项目',
+      filters: [{ name: 'Tanloom Engine Project', extensions: ['dfp', 'json'] }],
       properties: ['openFile']
     });
     if (r.canceled || !r.filePaths.length) return null;
@@ -139,13 +139,13 @@ function registerIpc() {
     return { path: file, text: fs.readFileSync(file, 'utf-8') };
   });
 
-  ipcMain.handle('df:save-project', async (e, { filePath, text, suggestedName }) => {
+  ipcMain.handle('tl:save-project', async (e, { filePath, text, suggestedName }) => {
     let target = filePath;
     if (!target) {
       const r = await dialog.showSaveDialog(owner(e), {
-        title: '保存 DualForge 项目',
-        defaultPath: (suggestedName || 'project') + '.dfp',
-        filters: [{ name: 'DualForge Project', extensions: ['dfp'] }]
+        title: '保存 Tanloom Engine 项目',
+        defaultPath: (suggestedName || 'project') + '.tle',
+        filters: [{ name: 'Tanloom Engine Project', extensions: ['dfp'] }]
       });
       if (r.canceled || !r.filePath) return null;
       target = r.filePath;
@@ -154,7 +154,7 @@ function registerIpc() {
     return { path: target };
   });
 
-  ipcMain.handle('df:export-code', async (e, { suggestedName, files }) => {
+  ipcMain.handle('tl:export-code', async (e, { suggestedName, files }) => {
     const r = await dialog.showOpenDialog(owner(e), {
       title: '选择代码导出目录',
       properties: ['openDirectory', 'createDirectory']

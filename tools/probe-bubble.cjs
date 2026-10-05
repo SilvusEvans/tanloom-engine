@@ -18,7 +18,7 @@ const { registerIpc } = require('../ipc.cjs');
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('no-sandbox');
-app.setPath('userData', path.join(require('os').tmpdir(), 'df-bubble'));
+app.setPath('userData', path.join(require('os').tmpdir(), 'tanloom-bubble'));
 registerScheme();
 
 const ROOT = path.join(__dirname, '..');
@@ -70,7 +70,7 @@ app.whenReady().then(async () => {
     // 取一块积木上「不在字段文字上」的点击点。
     // 落在字段上会被 Blockly 判成字段交互（和原版一致），测试就会误判成「没反应」。
     window.__pt = (id) => {
-      const b = window.__df.ws._findBlock(id);
+      const b = window.__tl.ws._findBlock(id);
       if (!b || !b.getSvgRoot()) return null;
       const r = b.getSvgRoot().getBoundingClientRect();
       const isField = (el) => {
@@ -107,7 +107,7 @@ app.whenReady().then(async () => {
       };
     };
     // 临时焦点是全局独占的（拿第二次会抛错），插桩记录取还与调用栈
-    const fm = window.__df.Blockly.getFocusManager();
+    const fm = window.__tl.Blockly.getFocusManager();
     window.__focusLog = [];
     const orig = fm.takeEphemeralFocus.bind(fm);
     fm.takeEphemeralFocus = function (el) {
@@ -131,9 +131,9 @@ app.whenReady().then(async () => {
   /* ---- 0. 官方接口在不在 ---- */
   console.log('\n=== 0. scratch-blocks 的官方取值接口 ===');
   const api = await run(`(() => ({
-    reportValue: typeof window.__df.Blockly.reportValue,
-    showPositionedByBlock: typeof (window.__df.Blockly.DropDownDiv || {}).showPositionedByBlock,
-    getContentDiv: typeof (window.__df.Blockly.DropDownDiv || {}).getContentDiv,
+    reportValue: typeof window.__tl.Blockly.reportValue,
+    showPositionedByBlock: typeof (window.__tl.Blockly.DropDownDiv || {}).showPositionedByBlock,
+    getContentDiv: typeof (window.__tl.Blockly.DropDownDiv || {}).getContentDiv,
     valueReportBoxCss: [...document.styleSheets].some((s) => {
       try { return [...s.cssRules].some((r) => String(r.cssText).includes('valueReportBox')); } catch { return false; }
     }),
@@ -144,13 +144,13 @@ app.whenReady().then(async () => {
 
   /* ---- 挑积木：一块圆形 + 一块六边形 ---- */
   const picked = await run(`(async () => {
-    const df = window.__df;
-    const player = df.store.project.entities.find((e) => e.name === '玩家');
-    df.store.selectedEntityId = player.id;
-    df.ws.showEntity(player.id);
+    const tl = window.__tl;
+    const player = tl.store.project.entities.find((e) => e.name === '玩家');
+    tl.store.selectedEntityId = player.id;
+    tl.ws.showEntity(player.id);
     await new Promise((r) => setTimeout(r, 600));
     // 速度 = 240，是示例项目里现成的变量，好核对值
-    const bs = df.ws.ws.getAllBlocks(false);
+    const bs = tl.ws.ws.getAllBlocks(false);
     const rep = bs.find((b) => b.type === 'data_variable' && b.outputConnection && b.getOutputShape() === 2);
     const hex = bs.find((b) => b.outputConnection && b.getOutputShape() === 1);
     return { rep: rep ? rep.id : null, hex: hex ? hex.id : null,
@@ -175,7 +175,7 @@ app.whenReady().then(async () => {
         box.arrows.includes('blocklyDropDownArrow') && box.arrows.includes('blocklyDropDownContent'),
         JSON.stringify(box.arrows));
       const geo = await run(`(() => {
-        const b = window.__df.ws._findBlock(${JSON.stringify(picked.rep)});
+        const b = window.__tl.ws._findBlock(${JSON.stringify(picked.rep)});
         const r = b.getSvgRoot().getBoundingClientRect();
         const dd = document.querySelector('.blocklyDropDownDiv').getBoundingClientRect();
         // 原版按「第一个字段」定位：气泡在积木下方，水平对着那个字段
@@ -210,7 +210,7 @@ app.whenReady().then(async () => {
   {
     const LABEL_PT = `(() => {
       window.__ptOnLabel = (id) => {
-        const b = window.__df.ws._findBlock(id);
+        const b = window.__tl.ws._findBlock(id);
         const root = b && b.getSvgRoot();
         if (!root) return null;
         const t = root.querySelector('.blocklyLabelField text, .blocklyLabelField .blocklyFieldText');
@@ -222,7 +222,7 @@ app.whenReady().then(async () => {
         return { x, y, cls: (el && el.getAttribute && el.getAttribute('class')) || '',
                  onLabel: !!(el && el.closest && el.closest('.blocklyLabelField')) };
       };
-      const bs = window.__df.ws.ws.getAllBlocks(false)
+      const bs = window.__tl.ws.ws.getAllBlocks(false)
         .filter((b) => b.outputConnection && !b.isInFlyout && b.getSvgRoot());
       for (const b of bs) {
         const p = window.__ptOnLabel(b.id);
@@ -235,7 +235,7 @@ app.whenReady().then(async () => {
       labelPt.none ? `没有合适的（候选 ${(labelPt.candidates || []).join(', ')}）` : `${labelPt.type} 的标签落点 (${labelPt.x},${labelPt.y}) 命中 ${labelPt.cls}`);
 
     if (!labelPt.none) {
-      await run('window.__df.ws.hideValueBox()');
+      await run('window.__tl.ws.hideValueBox()');
       await click({ x: labelPt.x, y: labelPt.y }, 220);
       const box = await dumpBox();
       check('点在文字上也会出值（不被当成字段交互吞掉）',
@@ -245,7 +245,7 @@ app.whenReady().then(async () => {
 
     // 反向：落在可编辑字段（下拉/输入框）上时不该出值 —— 那一下要留给字段本身
     const fieldPt = await run(`(() => {
-      const bs = window.__df.ws.ws.getAllBlocks(false)
+      const bs = window.__tl.ws.ws.getAllBlocks(false)
         .filter((b) => b.outputConnection && !b.isInFlyout && b.getSvgRoot());
       for (const b of bs) {
         const rect = b.getSvgRoot().querySelector('.blocklyFieldRect');
@@ -260,14 +260,14 @@ app.whenReady().then(async () => {
     })()`);
     check('找得到一块「带可编辑字段」的圆形积木', !fieldPt.none, fieldPt.none ? '没有带 rect 的字段' : fieldPt.type);
     if (!fieldPt.none) {
-      await run('window.__df.ws.hideValueBox()');
+      await run('window.__tl.ws.hideValueBox()');
       await click({ x: fieldPt.x, y: fieldPt.y }, 220);
       const box = await dumpBox();
       check('落在可编辑字段上不出值（那一下归字段自己）', !box.present,
         box.present ? `不该弹气泡，却弹了「${box.text}」` : '没弹气泡（对）');
       // 收尾：把可能打开的下拉/输入框关掉，别影响后面的断言
       await run(`(() => {
-        if (window.__df.Blockly.DropDownDiv) { try { window.__df.Blockly.DropDownDiv.hideWithoutAnimation(); } catch (e) {} }
+        if (window.__tl.Blockly.DropDownDiv) { try { window.__tl.Blockly.DropDownDiv.hideWithoutAnimation(); } catch (e) {} }
         document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
         return 1;
       })()`);
@@ -328,7 +328,7 @@ app.whenReady().then(async () => {
     // 点它按原版是「换变量」而不是求值（这条也在下面一起验证）
     const WANT = ['sensing_mousex', 'sensing_mousey', 'sensing_timer'];
     const found = await run(`(async () => {
-      const ws = window.__df.ws.ws;
+      const ws = window.__tl.ws.ws;
       const fws = ws.getFlyout().getWorkspace();
       const b = fws.getAllBlocks(false).find((x) => ${JSON.stringify(WANT)}.includes(x.type) && x.outputConnection);
       if (!b) return { ok: false, total: fws.getAllBlocks(false).length };
@@ -343,7 +343,7 @@ app.whenReady().then(async () => {
       check('选择区里找得到候选圆形积木', false);
     } else {
       const pt = await run(`(() => {
-        const b = window.__df.ws._findBlock(${JSON.stringify(found.id)});
+        const b = window.__tl.ws._findBlock(${JSON.stringify(found.id)});
         if (!b || !b.getSvgRoot()) return null;
         const r = b.getSvgRoot().getBoundingClientRect();
         // 注意：SVG 元素的 className 是 SVGAnimatedString，过滤要用 getAttribute
@@ -366,7 +366,7 @@ app.whenReady().then(async () => {
 
       // 变量积木整块是下拉字段：点它应该出「选变量」的下拉，不是值气泡
       const varPt = await run(`(() => {
-        const fws = window.__df.ws.ws.getFlyout().getWorkspace();
+        const fws = window.__tl.ws.ws.getFlyout().getWorkspace();
         const b = fws.getAllBlocks(false).find((x) => x.type === 'data_variable' && x.outputConnection);
         if (!b || !b.getSvgRoot()) return null;
         const r = b.getSvgRoot().getBoundingClientRect();
@@ -389,14 +389,14 @@ app.whenReady().then(async () => {
   /* ---- 6. 出图 ---- */
   {
     await run(`(async () => {
-      const df = window.__df;
-      const b = df.ws._findBlock(${JSON.stringify(picked.rep || '')});
-      if (b) df.ws._reportValue(b, df.rt.state.entities['玩家']);
+      const tl = window.__tl;
+      const b = tl.ws._findBlock(${JSON.stringify(picked.rep || '')});
+      if (b) tl.ws._reportValue(b, tl.rt.state.entities['玩家']);
       await new Promise((r) => setTimeout(r, 200));
       return 1;
     })()`);
     const crop = await run(`(() => {
-      const b = window.__df.ws._findBlock(${JSON.stringify(picked.rep || '')});
+      const b = window.__tl.ws._findBlock(${JSON.stringify(picked.rep || '')});
       if (!b) return null;
       const r = b.getSvgRoot().getBoundingClientRect();
       return { x: Math.max(0, Math.round(r.left - 40)), y: Math.max(0, Math.round(r.top - 60)), width: 620, height: 260 };

@@ -1,6 +1,6 @@
 'use strict';
 /**
- * DualForge 冒烟测试：用 Electron 真机加载编辑器，收集控制台错误，
+ * Tanloom Engine 冒烟测试：用 Electron 真机加载编辑器，收集控制台错误，
  * 跑一遍运行时，并把界面截图保存下来。
  *
  *   node tools/smoke.cjs
@@ -38,8 +38,8 @@ async function shot(win, file, region) {
 
 /** 在页面里找一个落在「积木背景」上的点（避开字段文字，否则 Blockly 视为字段交互） */
 const LOCATE_JS = (finder) => `(() => {
-  const df = window.__df;
-  const b = (${finder})(df.ws.ws.getAllBlocks(false));
+  const tl = window.__tl;
+  const b = (${finder})(tl.ws.ws.getAllBlocks(false));
   if (!b) return null;
   const r = b.getSvgRoot().getBoundingClientRect();
   const isField = (el) => {
@@ -95,29 +95,29 @@ app.whenReady().then(async () => {
     }
   };
 
-  console.log('\n=== DualForge 冒烟测试 ===');
+  console.log('\n=== Tanloom Engine 冒烟测试 ===');
 
   await probe('模块全部加载（无 import 错误）', `(() => {
-    return { ok: !!window.__df && !!window.__df.ws && !!window.__df.rt, detail: 'window.__df 就绪' };
+    return { ok: !!window.__tl && !!window.__tl.ws && !!window.__tl.rt, detail: 'window.__tl 就绪' };
   })()`);
 
   await probe('积木渲染器是 scratch-blocks（与 Scratch 同一套几何）', `(() => {
     const host = document.querySelector('#blockly-host .injectionDiv');
-    const r = window.__df.ws.ws.getRenderer();
+    const r = window.__tl.ws.ws.getRenderer();
     const name = r && r.constructor ? r.constructor.name : '?';
-    const scroll = !!window.__df.ws.ws.getMetrics;
+    const scroll = !!window.__tl.ws.ws.getMetrics;
     return { ok: !!host && scroll, detail: 'renderer=' + name + ' · 工作区已注入' };
   })()`);
 
   await probe('工作区里的积木都渲染出来了', `(() => {
-    const ws = window.__df.ws.ws;
+    const ws = window.__tl.ws.ws;
     const styled = ws.getAllBlocks(false).filter((b) => !!b.getSvgRoot());
     const n = document.querySelectorAll('#blockly-host .blocklyDraggable').length;
     return { ok: styled.length >= 20 && n >= 20, detail: '模型 ' + styled.length + ' 块 / 已出图 ' + n + ' 块' };
   })()`);
 
   await probe('积木形状 = 官方度量（帽块 72.5 / 语句 56 / 字段 40×32）', `(() => {
-    const ws = window.__df.ws.ws;
+    const ws = window.__tl.ws.ws;
     const all = ws.getAllBlocks(false);
     // 只挑「没有任何字段、纯文字」的积木来量 —— 这些的尺寸与文案无关，
     // 可以逐像素和 Scratch 对齐；带字段的积木高度由渲染器自己决定。
@@ -140,20 +140,20 @@ app.whenReady().then(async () => {
   })()`);
 
   await probe('IR → 积木 → IR 往返零丢失（含字段）', `(() => {
-    const res = window.__df.ws.roundTrip();
+    const res = window.__tl.ws.roundTrip();
     const detail = res.ok ? res.checked + ' 个实体全部一致'
       : res.diffs.map((d) => d.entity).join(' / ');
     return { ok: res.ok, detail };
   })()`);
 
   await probe('IR → XML → IR 往返零丢失（含字段）', `(() => {
-    const res = window.__df.ws.roundTrip();
+    const res = window.__tl.ws.roundTrip();
     if (!res.ok) return { ok: false, detail: res.diffs.map((d) => d.entity).join(' / ') };
     return { ok: res.ok, detail: res.checked + ' 个实体全部一致' };
   })()`);
 
   await probe('记录示例项目的脚本基线（后面用来查污染）', `(() => {
-    window.__scriptSig = JSON.stringify(window.__df.store.project.entities.map((e) => [e.name, e.scripts]));
+    window.__scriptSig = JSON.stringify(window.__tl.store.project.entities.map((e) => [e.name, e.scripts]));
     return { ok: true, detail: window.__scriptSig.length + ' 字节' };
   })()`);
 
@@ -174,7 +174,7 @@ app.whenReady().then(async () => {
   })()`);
 
   await probe('运行时实体与订阅就绪', `(() => {
-    const rt = window.__df.rt;
+    const rt = window.__tl.rt;
     const n = rt.state.order.length;
     const subs = ['update', 'late_update', '_collision'].map(c => rt.subscribersOf(c).length);
     return { ok: n === 6 && subs[0] >= 3 && subs[1] >= 1 && subs[2] >= 2,
@@ -190,14 +190,14 @@ app.whenReady().then(async () => {
   })()`);
 
   const before = await probe('记录运行前玩家位置', `(() => {
-    const e = window.__df.rt.state.entities['玩家'];
+    const e = window.__tl.rt.state.entities['玩家'];
     return { ok: true, detail: 'y=' + e.y.toFixed(1) };
   })()`);
 
   await probe('点击运行后帧循环启动', `(async () => {
     document.querySelector('#btn-run').click();
     // 轮询而不是死等固定时长：首帧要等 rAF，机器忙的时候 700ms 不一定够
-    const rt = window.__df.rt;
+    const rt = window.__tl.rt;
     const t0 = performance.now();
     while (rt.frame < 2 && performance.now() - t0 < 4000) {
       await new Promise(r => setTimeout(r, 50));
@@ -207,7 +207,7 @@ app.whenReady().then(async () => {
   })()`);
 
   await probe('物理：重力把玩家拉到地面并停住（180 帧）', `(() => {
-    const rt = window.__df.rt;
+    const rt = window.__tl.rt;
     for (let i = 0; i < 180; i++) rt.step(1 / 60);
     const e = rt.state.entities['玩家'];
     const g = rt.state.entities['地面'];
@@ -217,7 +217,7 @@ app.whenReady().then(async () => {
   })()`);
 
   await probe('输入：按住方向键玩家横向移动', `(() => {
-    const rt = window.__df.rt;
+    const rt = window.__tl.rt;
     rt.state.vars['生命'] = 9999;
     const p = rt.state.entities['玩家'];
     const x0 = p.x;
@@ -229,7 +229,7 @@ app.whenReady().then(async () => {
   })()`);
 
   await probe('输入：按空格跳跃（vy 变正，向上）', `(() => {
-    const rt = window.__df.rt;
+    const rt = window.__tl.rt;
     rt.state.vars['生命'] = 9999;          // 别让碰撞把回合结束掉
     const p = rt.state.entities['玩家'];
     if (p.grounded !== true) { p.vy = 0; for (let i = 0; i < 60; i++) rt.step(1 / 60); }
@@ -242,7 +242,7 @@ app.whenReady().then(async () => {
   })()`);
 
   await probe('脚本驱动的移动：敌人来回巡逻（速度 × delta）', `(() => {
-    const rt = window.__df.rt;
+    const rt = window.__tl.rt;
     rt.state.vars['生命'] = 9999;
     let minX = 1e9, maxX = -1e9;
     for (let i = 0; i < 260; i++) { rt.step(1 / 60); const x = rt.state.entities['敌人'].x; if (x < minX) minX = x; if (x > maxX) maxX = x; }
@@ -250,14 +250,14 @@ app.whenReady().then(async () => {
   })()`);
 
   await probe('帧循环按阶段广播', `(() => {
-    const tl = window.__df.rt.timeline.slice(-1)[0];
+    const tl = window.__tl.rt.timeline.slice(-1)[0];
     const names = tl ? tl.stages.map(s => s.name) : [];
     const want = ['frame_start','input','physics_update','update','late_update','render','frame_end'];
     return { ok: want.every(w => names.includes(w)), detail: names.join(' → ') };
   })()`);
 
   await probe('自定义广播：拾取金币 → 加分 + 订阅者都执行', `(async () => {
-    const rt = window.__df.rt;
+    const rt = window.__tl.rt;
     const before = rt.state.vars['分数'];
     rt.broadcast('拾取金币', 1);
     await new Promise(r => setTimeout(r, 200));
@@ -266,7 +266,7 @@ app.whenReady().then(async () => {
   })()`);
 
   await probe('合成积木「受伤」在运行时可调用（内含子表达式）', `(async () => {
-    const rt = window.__df.rt;
+    const rt = window.__tl.rt;
     const before = rt.state.vars['生命'];
     rt.broadcast('玩家受伤', 1);
     await new Promise(r => setTimeout(r, 200));
@@ -275,7 +275,7 @@ app.whenReady().then(async () => {
   })()`);
 
   await probe('生命归零触发「游戏结束」并停止全部脚本', `(async () => {
-    const rt = window.__df.rt;
+    const rt = window.__tl.rt;
     rt.state.vars['生命'] = 1;
     rt.broadcast('玩家受伤', 5);
     await new Promise(r => setTimeout(r, 200));
@@ -302,9 +302,9 @@ app.whenReady().then(async () => {
   })()`);
 
   await probe('合成积木：选中一段积木 → 新积木 → 调用点被替换', `(() => {
-    const df = window.__df;
-    const ws = df.ws;
-    const ent = df.store.selectedEntity;
+    const tl = window.__tl;
+    const ws = tl.ws;
+    const ent = tl.store.selectedEntity;
     const blk = ws.ws.getAllBlocks(false).find((b) => b.previousConnection && !b.outputConnection);
     if (!blk) return { ok: false, detail: '没有找到可封装的语句块' };
 
@@ -323,7 +323,7 @@ app.whenReady().then(async () => {
     };
     let inIr = false, inWs = false;
     try {
-      df.store.project.macros[macro.id] = macro;
+      tl.store.project.macros[macro.id] = macro;
       ws.registerMacros();
       ws.replaceWithMacro(blk, macro);
       ws._writeBack();
@@ -333,7 +333,7 @@ app.whenReady().then(async () => {
       // 还原：IR 直接回滚，工作区从 IR 重建
       ent.scripts = JSON.parse(snapshot);
       ent.scriptPos = JSON.parse(scriptPos);
-      delete df.store.project.macros[macro.id];
+      delete tl.store.project.macros[macro.id];
       try { ws.registerMacros(); } catch (e) { /* ignore */ }
       try { ws.refresh(true); } catch (e) { /* ignore */ }
     }
@@ -343,9 +343,9 @@ app.whenReady().then(async () => {
   // 这一条是通用守卫：上面那类「测试把项目改坏」的坑要能自己撞出来，
   // 否则症状会飘到很远的断言上，排查方向全错。
   await probe('示例项目没被前面的测试改坏（六条脚本都还在）', `(() => {
-    const df = window.__df;
+    const tl = window.__tl;
     const sig = window.__scriptSig;
-    const now = JSON.stringify(df.store.project.entities.map((e) => [e.name, e.scripts]));
+    const now = JSON.stringify(tl.store.project.entities.map((e) => [e.name, e.scripts]));
     if (!sig) return { ok: false, detail: '没有记到基线签名' };
     if (sig === now) return { ok: true, detail: '与基线完全一致' };
     // 找出具体是哪个实体变了，方便定位
@@ -361,10 +361,10 @@ app.whenReady().then(async () => {
   })()`);
 
   await probe('新建积木分类 → 立刻出现在选择区', `(() => {
-    const df = window.__df;
+    const tl = window.__tl;
     const before = document.querySelectorAll('#blockly-host .blocklyToolboxCategory').length;
-    df.store.addCategory({ name: '冒烟分类', color: '#E53935', icon: '⚔', order: 200 });
-    const cats = Object.values(df.store.project.categories);
+    tl.store.addCategory({ name: '冒烟分类', color: '#E53935', icon: '⚔', order: 200 });
+    const cats = Object.values(tl.store.project.categories);
     const c = cats.find(x => x.name === '冒烟分类');
     return { ok: !!c && cats.length === before - 1 + 1 + 1,
              detail: '分类数 ' + before + ' → ' + cats.length + '，新建 id=' + (c && c.id) };
@@ -384,11 +384,11 @@ app.whenReady().then(async () => {
   })()`);
 
   await probe('从零新建积木 → 落到选择区与画布', `(async () => {
-    const df = window.__df;
-    const cat = Object.values(df.store.project.categories).find(x => x.name === '冒烟分类');
-    const n0 = df.ws.ws.getAllBlocks(false).filter(b => b.type.startsWith('df_macro_')).length;
+    const tl = window.__tl;
+    const cat = Object.values(tl.store.project.categories).find(x => x.name === '冒烟分类');
+    const n0 = tl.ws.ws.getAllBlocks(false).filter(b => b.type.startsWith('df_macro_')).length;
     // 直接走选择区按钮背后那条路径（按钮本身是 SVG，合成事件不稳，这里测同一入口）
-    df.ws.createMacroIn(cat.id);
+    tl.ws.createMacroIn(cat.id);
     await new Promise(r => setTimeout(r, 300));
     const modal = document.querySelector('.modal-back');
     if (!modal) return { ok: false, detail: '从零新建的对话框没弹出' };
@@ -397,8 +397,8 @@ app.whenReady().then(async () => {
     if (sel) sel.value = cat.id;
     modal.querySelectorAll('.foot button')[1].click();
     await new Promise(r => setTimeout(r, 900));
-    const m = Object.values(df.store.project.macros).find(x => x.name === '冒烟积木');
-    const n1 = df.ws.ws.getAllBlocks(false).filter(b => b.type.startsWith('df_macro_')).length;
+    const m = Object.values(tl.store.project.macros).find(x => x.name === '冒烟积木');
+    const n1 = tl.ws.ws.getAllBlocks(false).filter(b => b.type.startsWith('df_macro_')).length;
     return { ok: !!m && m.category === cat.id && n1 === n0 + 1,
              detail: 'id=' + (m && m.id) + ' 分类=' + (m && m.category) + ' 画布上的合成积木 ' + n0 + ' → ' + n1 };
   })()`);
@@ -423,10 +423,10 @@ app.whenReady().then(async () => {
 
   // 切到舞台：它的「当 ▶ 被点击」脚本会把 分数 设成 0，效果最好观察
   await win.webContents.executeJavaScript(`(async () => {
-    const df = window.__df;
-    const stage = df.store.project.entities.find(e => e.kind === 'stage');
-    df.store.selectedEntityId = stage.id;
-    df.ws.showEntity(stage.id);
+    const tl = window.__tl;
+    const stage = tl.store.project.entities.find(e => e.kind === 'stage');
+    tl.store.selectedEntityId = stage.id;
+    tl.ws.showEntity(stage.id);
     await new Promise(r => setTimeout(r, 500));
     return 1;
   })()`);
@@ -435,12 +435,12 @@ app.whenReady().then(async () => {
   if (!stmt) {
     fail('点击积木：舞台上找不到可点的语句积木');
   } else {
-    await win.webContents.executeJavaScript(`(() => { window.__df.rt.state.vars['分数'] = 999; return 1; })()`);
-    const wasRunning = await win.webContents.executeJavaScript('window.__df.rt.isRunning()');
+    await win.webContents.executeJavaScript(`(() => { window.__tl.rt.state.vars['分数'] = 999; return 1; })()`);
+    const wasRunning = await win.webContents.executeJavaScript('window.__tl.rt.isRunning()');
     await clickAt(stmt.x, stmt.y);
     const after = await win.webContents.executeJavaScript(`({
-      v: window.__df.rt.state.vars['分数'],
-      running: window.__df.rt.isRunning(),
+      v: window.__tl.rt.state.vars['分数'],
+      running: window.__tl.rt.isRunning(),
     })`);
     const ok = after.v === 0;
     console.log(`  ${ok ? '✓' : '✖'} 点击语句积木 → 整条栈执行一遍 — 分数 999 → ${after.v}`);
@@ -454,7 +454,7 @@ app.whenReady().then(async () => {
 
   // 拖拽不应该触发出执行
   if (stmt) {
-    await win.webContents.executeJavaScript(`(() => { window.__df.rt.state.vars['分数'] = 555; return 1; })()`);
+    await win.webContents.executeJavaScript(`(() => { window.__tl.rt.state.vars['分数'] = 555; return 1; })()`);
     win.webContents.sendInputEvent({ type: 'mouseMove', x: stmt.x, y: stmt.y });
     win.webContents.sendInputEvent({ type: 'mouseDown', x: stmt.x, y: stmt.y, button: 'left', clickCount: 1 });
     for (const d of [10, 25, 45, 60]) {
@@ -463,7 +463,7 @@ app.whenReady().then(async () => {
     }
     win.webContents.sendInputEvent({ type: 'mouseUp', x: stmt.x + 60, y: stmt.y + 60, button: 'left', clickCount: 1 });
     await new Promise((r) => setTimeout(r, 400));
-    const v = await win.webContents.executeJavaScript(`window.__df.rt.state.vars['分数']`);
+    const v = await win.webContents.executeJavaScript(`window.__tl.rt.state.vars['分数']`);
     const ok = v === 555;
     console.log(`  ${ok ? '✓' : '✖'} 拖动积木不会误触发执行 — 分数 = ${v}（期望 555）`);
     if (!ok) fail('拖动误触发执行 / 分数 ' + v);
@@ -552,7 +552,7 @@ app.whenReady().then(async () => {
   }
 
   // 点字段 / 选择区里的积木都不该执行
-  await win.webContents.executeJavaScript(`(() => { window.__df.rt.state.vars['分数'] = 777; return 1; })()`);
+  await win.webContents.executeJavaScript(`(() => { window.__tl.rt.state.vars['分数'] = 777; return 1; })()`);
   const flyPt = await win.webContents.executeJavaScript(`(() => {
     const g = document.querySelector('#blockly-host .blocklyFlyout .blocklyDraggable');
     if (!g) return null;
@@ -562,7 +562,7 @@ app.whenReady().then(async () => {
   })()`);
   if (flyPt) {
     await clickAt(flyPt.x, flyPt.y);
-    const v = await win.webContents.executeJavaScript(`window.__df.rt.state.vars['分数']`);
+    const v = await win.webContents.executeJavaScript(`window.__tl.rt.state.vars['分数']`);
     const ok = v === 777;
     console.log(`  ${ok ? '✓' : '✖'} 点选择区里的积木不会执行 — 分数 = ${v}（期望 777）`);
     if (!ok) fail('点选择区积木误触发执行');
@@ -575,7 +575,7 @@ app.whenReady().then(async () => {
   // 「定义有没有真的注册进渲染器、两个下拉在不在」——那一段只有真机才跑得到。
   {
     const info = await win.webContents.executeJavaScript(`(() => {
-      const B = window.__df.Blockly;
+      const B = window.__tl.Blockly;
       if (!B.Blocks['df_set_subscribed']) return { registered: false };
       const ws = new B.Workspace();
       const b = ws.newBlock('df_set_subscribed');
@@ -609,10 +609,10 @@ app.whenReady().then(async () => {
   // 每个积木都要能在渲染器里落成「真积木」，而不是兜底的「⚠ 未识别」。
   // 「代码 ↔ 积木」的双向对应在 npm test 里已经逐个验过了（纯 Node、秒级）；
   // 这里补的是另一半：IR 节点 → nodeToXml 有没有命中映射表。
-  // 这条链路走 df:// 协议，纯 Node import 不了，只能真机跑。
+  // 这条链路走 tanloom:// 协议，纯 Node import 不了，只能真机跑。
   {
     const cover = await win.webContents.executeJavaScript(`(() => {
-      const { blockdefs, scratchSync, store } = window.__df;
+      const { blockdefs, scratchSync, store } = window.__tl;
       const bad = [];
       for (const d of blockdefs.ALL_DEFS) {
         try {
@@ -652,12 +652,12 @@ app.whenReady().then(async () => {
     return 1;
   })()`);
 
-  await win.webContents.executeJavaScript(`window.__df.rt.input.keys.clear()`);
+  await win.webContents.executeJavaScript(`window.__tl.rt.input.keys.clear()`);
   await sendKey('keyDown', 'Right');
-  const heldKeys = await win.webContents.executeJavaScript(`[...window.__df.rt.input.keys]`);
+  const heldKeys = await win.webContents.executeJavaScript(`[...window.__tl.rt.input.keys]`);
   await sendKey('keyUp', 'Right');
   await new Promise((r) => setTimeout(r, 150));
-  const releasedKeys = await win.webContents.executeJavaScript(`[...window.__df.rt.input.keys]`);
+  const releasedKeys = await win.webContents.executeJavaScript(`[...window.__tl.rt.input.keys]`);
   {
     const ok = heldKeys.includes('ArrowRight') && !releasedKeys.includes('ArrowRight');
     console.log(`  ${ok ? '✓' : '✖'} 真实键盘进得了运行时 — 按住 ${JSON.stringify(heldKeys)} / 松开 ${JSON.stringify(releasedKeys)}`);
@@ -667,10 +667,10 @@ app.whenReady().then(async () => {
   {
     // 焦点强行放到运行按钮上（用户 Tab 过去也一样），按空格只能给游戏
     await win.webContents.executeJavaScript(`document.querySelector('#btn-run').focus()`);
-    const before = await win.webContents.executeJavaScript(`window.__df.rt.isRunning()`);
+    const before = await win.webContents.executeJavaScript(`window.__tl.rt.isRunning()`);
     await pressKey('Space');
     await new Promise((r) => setTimeout(r, 300));
-    const after = await win.webContents.executeJavaScript(`window.__df.rt.isRunning()`);
+    const after = await win.webContents.executeJavaScript(`window.__tl.rt.isRunning()`);
     const ok = before === after;
     console.log(`  ${ok ? '✓' : '✖'} 焦点在按钮上按空格不会误触运行/停止 — running ${before} → ${after}`);
     if (!ok) fail('按空格误触了运行按钮 / running ' + before + ' → ' + after);
@@ -711,23 +711,23 @@ app.whenReady().then(async () => {
 
     // 端到端：全屏下真的能走能跳
     const before = await win.webContents.executeJavaScript(`(() => {
-      const rt = window.__df.rt;
+      const rt = window.__tl.rt;
       rt.state.vars['生命'] = 9999;
       const p = rt.state.entities['玩家'];
       for (let i = 0; i < 90; i++) rt.step(1/60);
       return { x: p.x, y: p.y };
     })()`);
     await sendKey('keyDown', 'Right');
-    await win.webContents.executeJavaScript(`(() => { const rt = window.__df.rt; for (let i = 0; i < 40; i++) rt.step(1/60); return 1; })()`);
+    await win.webContents.executeJavaScript(`(() => { const rt = window.__tl.rt; for (let i = 0; i < 40; i++) rt.step(1/60); return 1; })()`);
     await sendKey('keyUp', 'Right');
-    const movedX = await win.webContents.executeJavaScript(`window.__df.rt.state.entities['玩家'].x`);
+    const movedX = await win.webContents.executeJavaScript(`window.__tl.rt.state.entities['玩家'].x`);
     const okWalk = movedX > before.x + 40;
     console.log(`  ${okWalk ? '✓' : '✖'} 全屏下按住 → 玩家真的往右走 — x ${before.x.toFixed(0)} → ${movedX.toFixed(0)}`);
     if (!okWalk) fail('全屏下键盘没驱动角色移动 / x ' + before.x + ' → ' + movedX);
 
     await sendKey('keyDown', 'Space');
-    await win.webContents.executeJavaScript(`(() => { window.__df.rt.step(1/60); return 1; })()`);
-    const vy = await win.webContents.executeJavaScript(`window.__df.rt.state.entities['玩家'].vy`);
+    await win.webContents.executeJavaScript(`(() => { window.__tl.rt.step(1/60); return 1; })()`);
+    const vy = await win.webContents.executeJavaScript(`window.__tl.rt.state.entities['玩家'].vy`);
     await sendKey('keyUp', 'Space');
     const okJump = vy > 100;
     console.log(`  ${okJump ? '✓' : '✖'} 全屏下按空格玩家起跳（vy 变正）— vy=${Number(vy).toFixed(0)}`);
@@ -735,7 +735,7 @@ app.whenReady().then(async () => {
 
     // 留一张全屏游玩的图
     await win.webContents.executeJavaScript(`(() => {
-      const rt = window.__df.rt;
+      const rt = window.__tl.rt;
       rt.state.vars['分数'] = 3; rt.state.vars['生命'] = 3;
       const p = rt.state.entities['玩家'];
       p.x = -60; p.y = -60; p.vx = 0; p.vy = 0;
@@ -776,28 +776,28 @@ app.whenReady().then(async () => {
       console.log(`  ✓ 独立运行窗口开出来了 — 窗口数 ${before} → ${BrowserWindow.getAllWindows().length}，标题「${pw.getTitle()}」`);
 
       const st = await prun(`(() => {
-        const df = window.__df;
-        return df && df.rt ? { running: df.rt.isRunning(), frame: df.rt.frame,
-                               entities: df.rt.state.order.length,
+        const tl = window.__tl;
+        return tl && tl.rt ? { running: tl.rt.isRunning(), frame: tl.rt.frame,
+                               entities: tl.rt.state.order.length,
                                canvas: [document.querySelector('#player-canvas').width, document.querySelector('#player-canvas').height] }
                            : { running: false, frame: 0, entities: 0, canvas: [0, 0] };
       })()`);
       await sleep2(600);
-      const frame2 = await prun(`window.__df.rt.frame`);
+      const frame2 = await prun(`window.__tl.rt.frame`);
       const okRun = st.running === true && st.entities === 6 && frame2 > st.frame + 3;
       console.log(`  ${okRun ? '✓' : '✖'} 里面真的在跑 — ${st.entities} 个实体 · 帧 ${st.frame} → ${frame2} · 画布 ${st.canvas.join('×')}`);
       if (!okRun) fail(`运行窗口没跑起来 / running=${st.running} entities=${st.entities} frame=${st.frame}→${frame2}`);
 
       // 键盘要能驱动那个窗口里的角色
-      await prun(`(() => { const rt = window.__df.rt; rt.state.vars['生命'] = 9999;
+      await prun(`(() => { const rt = window.__tl.rt; rt.state.vars['生命'] = 9999;
         const p = rt.state.entities['玩家']; for (let i = 0; i < 90; i++) rt.step(1/60); return 1; })()`);
-      const x0 = await prun(`window.__df.rt.state.entities['玩家'].x`);
+      const x0 = await prun(`window.__tl.rt.state.entities['玩家'].x`);
       pw.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Right' });
       await sleep2(80);
-      const held = await prun(`[...window.__df.rt.input.keys]`);
-      await prun(`(() => { const rt = window.__df.rt; for (let i = 0; i < 40; i++) rt.step(1/60); return 1; })()`);
+      const held = await prun(`[...window.__tl.rt.input.keys]`);
+      await prun(`(() => { const rt = window.__tl.rt; for (let i = 0; i < 40; i++) rt.step(1/60); return 1; })()`);
       pw.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Right' });
-      const x1 = await prun(`window.__df.rt.state.entities['玩家'].x`);
+      const x1 = await prun(`window.__tl.rt.state.entities['玩家'].x`);
       const okKeys = held.includes('ArrowRight') && x1 > x0 + 40;
       console.log(`  ${okKeys ? '✓' : '✖'} 运行窗口里键盘能玩 — 按住 → 后 x ${x0.toFixed(0)} → ${x1.toFixed(0)}`);
       if (!okKeys) fail(`运行窗口键盘无效 / keys=${JSON.stringify(held)} x ${x0}→${x1}`);
@@ -810,7 +810,7 @@ app.whenReady().then(async () => {
       for (let i = 0; i < 20 && !reset; i++) {
         await sleep2(150);
         reset = await win.webContents.executeJavaScript(
-          `({ open: window.__df.playerOpen, on: document.querySelector('#btn-player').classList.contains('on') })`)
+          `({ open: window.__tl.playerOpen, on: document.querySelector('#btn-player').classList.contains('on') })`)
           .then((r) => r.open === false && r.on === false).catch(() => false);
       }
       const okClose = gone && reset;
@@ -822,7 +822,7 @@ app.whenReady().then(async () => {
   // 运行中的舞台（把玩家挪到金币上，看到加分与粒子）
   try {
     await win.webContents.executeJavaScript(`(() => {
-      const rt = window.__df.rt;
+      const rt = window.__tl.rt;
       rt.halted = false;
       rt.running = true;
       rt.paused = true;         // 手动步进，避免 rAF 干扰

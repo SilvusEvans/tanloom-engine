@@ -1,5 +1,5 @@
 /**
- * DualForge — 代码生成（IR → TypeScript）
+ * Tanloom Engine — 代码生成（IR → TypeScript）
  * ================================================================
  * 这是「IR → 代码视图」这条投影。
  *
@@ -30,7 +30,7 @@ class Gen {
   ent(ref) {
     const name = ref === '$self' || ref == null ? null : String(ref);
     if (!name) return 'self';
-    return `df.entity(${this.q(name)})`;
+    return `tl.entity(${this.q(name)})`;
   }
   varRef(name) { return memberAccess('vars', name); }
   listRef(name) { return memberAccess('lists', name); }
@@ -148,7 +148,7 @@ function genScript(script, entityName, g) {
   g.usedNames.add(fnName);
 
   const lines = [];
-  lines.push(`// @df:script ${script.id}`);
+  lines.push(`// @tl:script ${script.id}`);
   lines.push(annotationLine(a));
   lines.push(`export async function ${fnName}(ctx: FrameCtx) {`);
   lines.push(`  const self = ctx.self;`);
@@ -167,7 +167,7 @@ function genMacro(macro, g) {
   const lines = [];
   const names = (macro.params || []).map((p) => p.name);
   const isStmt = macro.kind === 'statement' || macro.kind === 'event';
-  lines.push(`// @df:macro ${macro.id}`);
+  lines.push(`// @tl:macro ${macro.id}`);
   lines.push(`// @macro ${macro.name}(${names.join(', ')})`);
   if (isStmt) lines.push(`// @kind ${macro.kind}`);
   lines.push(`// @display ${macro.display || macro.name}`);
@@ -199,7 +199,7 @@ export function generateFiles(project) {
   const files = [];
 
   const header =
-    `/* DualForge · 由积木视图同步生成\n` +
+    `/* Tanloom Engine · 由积木视图同步生成\n` +
     ` * 本文件与积木视图共享同一份 IR（唯一真源），可以双向编辑：\n` +
     ` *   · 积木改动 → 自动重写本文件\n` +
     ` *   · 本文件改动 → 按 Ctrl+S 解析回积木\n` +
@@ -207,7 +207,7 @@ export function generateFiles(project) {
     ` * 支持 // @macro name(p) => 表达式 来定义新的合成积木。\n` +
     ` */\n` +
     `import type { FrameCtx, Entity } from './_runtime';\n` +
-    `import { df, vars, lists } from './_runtime';\n`;
+    `import { tl, vars, lists } from './_runtime';\n`;
 
   for (const ent of project.entities || []) {
     if (ent.kind === 'group') continue;
@@ -239,7 +239,7 @@ export function generateFiles(project) {
   return files;
 }
 
-const RUNTIME_STUB = `/* DualForge 运行时 API 参考（只读）
+const RUNTIME_STUB = `/* Tanloom Engine 运行时 API 参考（只读）
  * 生成的代码里可以自由使用下面这些符号。
  */
 
@@ -269,7 +269,7 @@ export interface FrameCtx {
 export declare const vars:   Record<string, number>;
 export declare const lists:  Record<string, number[]>;
 
-export declare const df: {
+export declare const tl: {
   entity(name: string): Entity;
   setPosition(e: Entity, x: number, y: number): void;
   setVelocity(e: Entity, vx: number, vy: number): void;

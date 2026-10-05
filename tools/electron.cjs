@@ -1,6 +1,6 @@
 'use strict';
 /**
- * DualForge — Electron 启动器
+ * Tanloom Engine — Electron 启动器
  * ================================================================
  * 本机无法访问 npm registry，所以 Electron 是以「离线解压 + 自带二进制」的方式
  * 内置在 node_modules/electron/dist 里的（不是官方的 npm 包）。

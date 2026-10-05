@@ -19,7 +19,7 @@ const { registerScheme, installHandler, APP_URL } = require('../app-protocol.cjs
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('no-sandbox');
-app.setPath('userData', path.join(require('os').tmpdir(), 'dualforge-theme'));
+app.setPath('userData', path.join(require('os').tmpdir(), 'tanloom-theme'));
 registerScheme();
 const ROOT = path.join(__dirname, '..');
 
@@ -61,7 +61,7 @@ app.whenReady().then(async () => {
   /* ============================================================ */
   console.log('\n=== 启动即应用（不闪默认皮肤） ===');
   const boot = await run(`(() => {
-    const el = document.getElementById('df-appearance');
+    const el = document.getElementById('tanloom-appearance');
     const cs = getComputedStyle(document.documentElement);
     return {
       hasStyle: !!el,
@@ -70,12 +70,12 @@ app.whenReady().then(async () => {
       dark: document.documentElement.dataset.themeDark,
       accent: cs.getPropertyValue('--accent').trim(),
       panel: cs.getPropertyValue('--panel').trim(),
-      theme: window.__df && window.__df.appearance && window.__df.appearance.state.theme,
+      theme: window.__tl && window.__tl.appearance && window.__tl.appearance.state.theme,
     };
   })()`);
   check('外观样式表已注入 head 末尾（同特异性靠后胜出）',
     boot.hasStyle && boot.isLastInHead,
-    `#df-appearance ${boot.hasStyle ? '存在' : '缺失'}，head 末位=${boot.isLastInHead}`);
+    `#tl-appearance ${boot.hasStyle ? '存在' : '缺失'}，head 末位=${boot.isLastInHead}`);
   check('默认主题生效（计算值来自暗色皮肤）',
     boot.accent === '#4c97ff' && boot.panel === '#212734' && boot.dark === '1',
     `theme=${boot.theme} --accent=${boot.accent} --panel=${boot.panel} data-theme-dark=${boot.dark}`);
@@ -103,7 +103,7 @@ app.whenReady().then(async () => {
 
   const theme = await run(`(async () => {
     const modal = document.querySelector('.modal-back');
-    const jsonBefore = window.__df.store.toJSON();
+    const jsonBefore = window.__tl.store.toJSON();
     const btns = [...modal.querySelectorAll('.ap-theme')];
     const names = [...modal.querySelectorAll('.ap-theme .ap-name')].map(e => e.textContent);
     const i = names.findIndex(n => n.includes('晨曦'));
@@ -111,13 +111,13 @@ app.whenReady().then(async () => {
     await new Promise(r => setTimeout(r, 200));
     const cs = getComputedStyle(document.documentElement);
     return {
-      jsonSame: window.__df.store.toJSON() === jsonBefore,
+      jsonSame: window.__tl.store.toJSON() === jsonBefore,
       dark: document.documentElement.dataset.themeDark,
       accent: cs.getPropertyValue('--accent').trim(),
       panel: cs.getPropertyValue('--panel').trim(),
       bodyBg: getComputedStyle(document.body).backgroundColor,
       marked: btns[i].classList.contains('on'),
-      state: window.__df.appearance.state.theme,
+      state: window.__tl.appearance.state.theme,
     };
   })()`);
   check('点「晨曦 · 白」→ 计算样式真的变浅（不是只改了内部状态）',
@@ -145,7 +145,7 @@ app.whenReady().then(async () => {
       picked, dotsOnAfterPick,
       auto: cs(), autoOn: auto.classList.contains('on'),
       dotsOnAfterAuto: dots.filter(d => d.classList.contains('on')).length,
-      state: window.__df.appearance.state.accent,
+      state: window.__tl.appearance.state.accent,
     };
   })()`);
   check('选「品红」→ --accent 变成品红',
@@ -157,12 +157,12 @@ app.whenReady().then(async () => {
   /* ============================================================ */
   console.log('\n=== 自定义重点色（取色器 + 字色自动配） ===');
   const custom = await run(`(async () => {
-    const ap = window.__df.appearance;
+    const ap = window.__tl.appearance;
     const modal = document.querySelector('.modal-back');
     const inp = modal.querySelector('.ap-custom input[type="color"]');
     if (!inp) return { err: '重点色那一排没有取色器' };
     const cs = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-    const lsAccent = () => { try { return JSON.parse(localStorage.getItem('df.appearance.v1') || '{}').accent; } catch { return '(坏值)'; } };
+    const lsAccent = () => { try { return JSON.parse(localStorage.getItem('tl.appearance.v1') || '{}').accent; } catch { return '(坏值)'; } };
     ap.setAccent(null);
     await new Promise(r => setTimeout(r, 140));
     // 浅黄：白字会看不见，所以字色必须自动翻成深的
@@ -200,7 +200,7 @@ app.whenReady().then(async () => {
   /* ============================================================ */
   console.log('\n=== 字体与字号（界面 / 代码分开） ===');
   const font = await run(`(async () => {
-    const ap = window.__df.appearance;
+    const ap = window.__tl.appearance;
     const modal = document.querySelector('.modal-back');
     const pick = (sel, v) => { sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true })); };
     // 按类名找控件，不靠「第几个 select」—— 加了字号下拉之后下标就变了
@@ -229,7 +229,7 @@ app.whenReady().then(async () => {
 
   // 字号：样式表里全是 calc(基准px * var(--ui-scale))，所以这里比的是「实际算出来的 px」
   const scale = await run(`(async () => {
-    const ap = window.__df.appearance;
+    const ap = window.__tl.appearance;
     const modal = document.querySelector('.modal-back');
     const pick = (sel, v) => { sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true })); };
     const fs = (sel) => {
@@ -273,7 +273,7 @@ app.whenReady().then(async () => {
   /* ============================================================ */
   console.log('\n=== 关窗退订 ===');
   const unsub = await run(`(async () => {
-    const ap = window.__df.appearance;
+    const ap = window.__tl.appearance;
     const before = ap._listeners.size;
     // 用「完成」按钮关窗（第一个 foot 按钮）
     document.querySelector('.modal-back .foot button').click();
@@ -293,9 +293,9 @@ app.whenReady().then(async () => {
   /* ============================================================ */
   console.log('\n=== 持久化（localStorage，不进项目文件） ===');
   const stored = await run(`(() => {
-    const raw = localStorage.getItem('df.appearance.v1');
+    const raw = localStorage.getItem('tl.appearance.v1');
     const j = JSON.parse(raw || '{}');
-    return { raw, j, inProject: window.__df.store.toJSON().includes('appearance') };
+    return { raw, j, inProject: window.__tl.store.toJSON().includes('appearance') };
   })()`);
   check('选择写进了 localStorage',
     stored.j.theme === 'light' && stored.j.uiFont === 'serif' && stored.j.codeFont === 'serif',
@@ -307,7 +307,7 @@ app.whenReady().then(async () => {
   await new Promise((r) => setTimeout(r, 2600));
   const reloaded = await run(`(() => {
     const cs = getComputedStyle(document.documentElement);
-    const el = document.getElementById('df-appearance');
+    const el = document.getElementById('tanloom-appearance');
     return {
       dark: document.documentElement.dataset.themeDark,
       panel: cs.getPropertyValue('--panel').trim(),
@@ -316,7 +316,7 @@ app.whenReady().then(async () => {
       codeFs: parseFloat(getComputedStyle(document.querySelector('.code-editor pre')).fontSize),
       fam: getComputedStyle(document.body).fontFamily,
       hasStyle: !!el,
-      state: window.__df.appearance.state,
+      state: window.__tl.appearance.state,
     };
   })()`);
   check('重载后外观自动恢复（浅色 + 衬线 + 自定义重点色 + 代码特大）',
@@ -334,7 +334,7 @@ app.whenReady().then(async () => {
     const cs = (sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el).backgroundColor : '(无)'; };
     const v = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
     return {
-      theme: window.__df.appearance.state.theme,
+      theme: window.__tl.appearance.state.theme,
       rootPanel: v('--panel'), rootTopbarA: v('--topbar-a'),
       topbar: cs('.topbar'), modal: cs('.modal'), dock: cs('.dock'),
       preview: cs('.ap-preview'), scrim: cs('.modal-back'),
@@ -349,7 +349,7 @@ app.whenReady().then(async () => {
   // (b) 关掉对话框、换 Solarized 主题：看整个编辑器（含积木区）跟着变
   await run(`(async () => {
     document.querySelectorAll('.modal-back').forEach(e => e.remove());
-    window.__df.appearance.setTheme('solarized');
+    window.__tl.appearance.setTheme('solarized');
     await new Promise(r => setTimeout(r, 420));
     return 1;
   })()`);
@@ -358,9 +358,9 @@ app.whenReady().then(async () => {
 
   // (c) 代码视图 + 等宽字体：字体族这一档的效果
   await run(`(async () => {
-    window.__df.appearance.setTheme('midnight');
-    window.__df.appearance.setUiFont('mono');
-    window.__df.appearance.setCodeFont('mono');
+    window.__tl.appearance.setTheme('midnight');
+    window.__tl.appearance.setUiFont('mono');
+    window.__tl.appearance.setCodeFont('mono');
     document.querySelector('#mode-tabs button[data-view="code"]').click();
     await new Promise(r => setTimeout(r, 600));
     return 1;
@@ -371,7 +371,7 @@ app.whenReady().then(async () => {
 
   // (d) 对话框下半段：自定义取色器 / 字体与字号 / 预览 / 分享码
   await run(`(async () => {
-    window.__df.appearance.setTheme('dark');
+    window.__tl.appearance.setTheme('dark');
     await new Promise(r => setTimeout(r, 220));
     document.querySelector('#btn-appearance').click();
     await new Promise(r => setTimeout(r, 460));
@@ -388,7 +388,7 @@ app.whenReady().then(async () => {
   await run(`(async () => {
     const back = document.querySelector('.modal-back');
     if (back) back.querySelector('.foot button').click();
-    const ap = window.__df.appearance;
+    const ap = window.__tl.appearance;
     ap.setTheme('dark'); ap.setUiFont('sans'); ap.setCodeFont('mono');
     ap.setUiScale('xl'); ap.setCodeScale('md'); ap.setAccent(null);
     document.querySelector('#mode-tabs button[data-view="blocks"]').click();
@@ -414,12 +414,12 @@ app.whenReady().then(async () => {
     return {
       okText,
       stillOpen: !!document.querySelector('.modal-back'),
-      state: window.__df.appearance.state,
+      state: window.__tl.appearance.state,
       accent: cs.getPropertyValue('--accent').trim(),
       dark: document.documentElement.dataset.themeDark,
       fam: getComputedStyle(document.body).fontFamily,
       codeFs: parseFloat(getComputedStyle(document.querySelector('.code-editor pre')).fontSize),
-      saved: localStorage.getItem('df.appearance.v1'),
+      saved: localStorage.getItem('tl.appearance.v1'),
     };
   })()`);
   check('「恢复默认」按钮文字正确', reset.okText === '恢复默认', `按钮＝${reset.okText}`);
@@ -442,7 +442,7 @@ app.whenReady().then(async () => {
   nativeTheme.themeSource = 'dark';
   await new Promise((r) => setTimeout(r, 320));
   const sysFollow = await run(`(async () => {
-    const ap = window.__df.appearance;
+    const ap = window.__tl.appearance;
     document.querySelector('#btn-appearance').click();
     await new Promise(r => setTimeout(r, 300));
     const modal = document.querySelector('.modal-back');
@@ -477,7 +477,7 @@ app.whenReady().then(async () => {
     if (flipped) break;
   }
   const sysLight = await run(`(() => {
-    const ap = window.__df.appearance;
+    const ap = window.__tl.appearance;
     const modal = document.querySelector('.modal-back');
     const cards = [...modal.querySelectorAll('.ap-theme')];
     const eff = cards.filter(b => b.classList.contains('eff')).map(b => b.querySelector('.ap-name').textContent);
@@ -496,7 +496,7 @@ app.whenReady().then(async () => {
     `手选=${sysLight.picked}（reserved）· 高亮=${sysLight.on.join('/')} · 虚线生效=${sysLight.eff.join('/')}`);
 
   const sysOff = await run(`(async () => {
-    const ap = window.__df.appearance;
+    const ap = window.__tl.appearance;
     const modal = document.querySelector('.modal-back');
     const cards = [...modal.querySelectorAll('.ap-theme')];
     const sol = cards.find(b => b.textContent.includes('Solarized'));
@@ -516,7 +516,7 @@ app.whenReady().then(async () => {
   /* ============================================================ */
   console.log('\n=== 分享码（把一套外观发给别人） ===');
   const share = await run(`(async () => {
-    const ap = window.__df.appearance;
+    const ap = window.__tl.appearance;
     const modal = document.querySelector('.modal-back');
     const box = modal.querySelector('.ap-share-code');
     const btn = (t) => [...modal.querySelectorAll('.ap-share-btns button')].find(b => b.textContent.includes(t));
@@ -575,12 +575,12 @@ app.whenReady().then(async () => {
     const open = document.querySelector('.modal-back');
     if (open) { open.querySelector('.foot button').click(); await new Promise(r => setTimeout(r, 140)); }
     // 再切到浅色皮肤 —— 全屏层必须还是它自己的深色，不能被编辑器皮肤带走
-    window.__df.appearance.setTheme('light');
+    window.__tl.appearance.setTheme('light');
     await new Promise(r => setTimeout(r, 220));
     const fsLayer = document.getElementById('fullscreen-layer');
     return {
-      theme: window.__df.appearance.state.theme,
-      listeners: window.__df.appearance._listeners.size,
+      theme: window.__tl.appearance.state.theme,
+      listeners: window.__tl.appearance._listeners.size,
       bg: getComputedStyle(fsLayer).backgroundColor,
       chrome: getComputedStyle(document.body).backgroundColor,
     };
@@ -588,7 +588,7 @@ app.whenReady().then(async () => {
   check('编辑器是浅色时，全屏层仍然深色',
     players.theme === 'light' && players.bg === 'rgb(5, 7, 11)',
     `theme=${players.theme} 编辑器底色=${players.chrome} 全屏层底色=${players.bg}（残留监听 ${players.listeners} 个）`);
-  await run(`window.__df.appearance.reset()`);
+  await run(`window.__tl.appearance.reset()`);
 
   /* ============================================================ */
   console.log('\n=== 页面错误 ===');

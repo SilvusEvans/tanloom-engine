@@ -1,5 +1,5 @@
 /**
- * DualForge — IR（中间表示）
+ * Tanloom Engine — IR（中间表示）
  * ================================================================
  * 设计原则 1：单一真源。
  *   积木视图、代码视图、场景视图都只是 IR 的渲染层，谁都不持有独立状态。
@@ -26,7 +26,7 @@ const JS_RESERVED = new Set([
   'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default', 'delete', 'do',
   'else', 'export', 'extends', 'finally', 'for', 'function', 'if', 'import', 'in', 'instanceof',
   'new', 'return', 'super', 'switch', 'this', 'throw', 'try', 'typeof', 'var', 'void', 'while',
-  'with', 'yield', 'let', 'static', 'enum', 'await', 'async', 'self', 'ctx', 'vars', 'lists', 'df'
+  'with', 'yield', 'let', 'static', 'enum', 'await', 'async', 'self', 'ctx', 'vars', 'lists', 'tl'
 ]);
 
 export function safeIdent(name) {

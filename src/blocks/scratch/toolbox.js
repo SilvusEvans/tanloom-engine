@@ -1,5 +1,5 @@
 /**
- * DualForge — 积木选择区（Blockly 的 toolbox + flyout）
+ * Tanloom Engine — 积木选择区（Blockly 的 toolbox + flyout）
  * ================================================================
  * 选择区的内容不是手写的：它从 core/blockdefs.js 遍历每个积木定义，
  * instantiate 出一个带默认值的节点，再走同一条 IR → XML 的投影。

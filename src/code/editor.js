@@ -1,5 +1,5 @@
 /**
- * DualForge — 代码编辑器
+ * Tanloom Engine — 代码编辑器
  * ================================================================
  * 轻量实现：一个 textarea 叠在带高亮的 pre 上。
  * 高亮直接复用解析器的词法分析结果，所以「编辑器看到的」和「解析器理解的」
@@ -16,7 +16,7 @@ const KEYWORDS = new Set([
   'export', 'async', 'await', 'function', 'const', 'let', 'var', 'if', 'else', 'while', 'for',
   'return', 'true', 'false', 'null', 'undefined', 'new', 'typeof', 'import', 'from', 'type', 'declare', 'void', 'break', 'continue'
 ]);
-const BUILTINS = new Set(['df', 'vars', 'lists', 'ctx', 'self', 'Math', 'Object', 'console']);
+const BUILTINS = new Set(['tl', 'vars', 'lists', 'ctx', 'self', 'Math', 'Object', 'console']);
 
 export function highlight(src) {
   const toks = tokenize(src);

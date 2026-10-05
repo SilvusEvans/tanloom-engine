@@ -7,7 +7,7 @@ const { registerIpc } = require('./ipc.cjs');
 const IS_DEV = process.argv.includes('--dev');
 const SRC = path.join(__dirname, 'src');
 
-// 编辑器资源走自定义协议 df://，不经过网络栈（端口 / 代理 / 防火墙都不会影响它）
+// 编辑器资源走自定义协议 tanloom://，不经过网络栈（端口 / 代理 / 防火墙都不会影响它）
 registerScheme();
 
 let mainWindow = null;
@@ -20,7 +20,7 @@ function createWindow() {
     minHeight: 720,
     show: false,
     backgroundColor: '#12151c',
-    title: 'DualForge',
+    title: 'Tanloom Engine',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

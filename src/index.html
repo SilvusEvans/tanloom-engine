@@ -3,11 +3,11 @@
 
 <head>
   <meta charset="UTF-8" />
-  <!-- 积木渲染器（scratch-blocks）通过 df://bundle/ 从 node_modules 加载，
-       它和编辑器本体（df://app/）不是同一个来源，所以必须显式放行。
+  <!-- 积木渲染器（scratch-blocks）通过 tanloom://bundle/ 从 node_modules 加载，
+       它和编辑器本体（tanloom://app/）不是同一个来源，所以必须显式放行。
        脚本仍然只允许本地来源；unsafe-eval 是「代码积木 / 代码视图」本身的能力。 -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' df://bundle; style-src 'self' 'unsafe-inline' df://bundle; script-src 'self' 'unsafe-eval' df://bundle; img-src 'self' data: blob: df://bundle; media-src 'self' df://bundle; font-src 'self' df://bundle; connect-src 'self' df://bundle;" />
-  <title>DualForge · 双模游戏引擎</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' tanloom://bundle; style-src 'self' 'unsafe-inline' tanloom://bundle; script-src 'self' 'unsafe-eval' tanloom://bundle; img-src 'self' data: blob: tanloom://bundle; media-src 'self' tanloom://bundle; font-src 'self' tanloom://bundle; connect-src 'self' tanloom://bundle;" />
+  <title>Tanloom Engine · 双模游戏引擎</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/layout.css" />
   <link rel="stylesheet" href="styles/blocks.css" />
@@ -20,7 +20,7 @@
     <header class="topbar">
       <div class="brand">
         <span class="logo">◈</span>
-        <span class="brand-name">DualForge</span>
+        <span class="brand-name">Tanloom Engine</span>
         <span class="brand-sub">双模引擎</span>
       </div>
 

@@ -16,7 +16,7 @@ const { registerIpc } = require('../ipc.cjs');
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('no-sandbox');
-app.setPath('userData', path.join(require('os').tmpdir(), 'df-player'));
+app.setPath('userData', path.join(require('os').tmpdir(), 'tanloom-player'));
 registerScheme();
 
 const ROOT = path.join(__dirname, '..');
@@ -63,7 +63,7 @@ app.whenReady().then(async () => {
     const title = pw.getTitle();
     check('窗口标题带项目名', /运行/.test(title), title);
     const ratio = await run(`(() => {
-      const s = window.__df.store.project.settings;
+      const s = window.__tl.store.project.settings;
       return { sw: s.stageWidth, sh: s.stageHeight };
     })()`);
     const [cw, ch] = pw.getContentSize();
@@ -80,14 +80,14 @@ app.whenReady().then(async () => {
   console.log('\n=== 2. 运行窗口里真的在跑 ===');
   {
     const r = await prun(`(() => {
-      const df = window.__df;
-      if (!df || !df.rt) return { ready: false };
+      const tl = window.__tl;
+      if (!tl || !tl.rt) return { ready: false };
       return {
         ready: true,
-        running: df.rt.isRunning(),
-        frame: df.rt.frame,
-        project: df.project && df.project.name,
-        entities: df.rt.state.order.length,
+        running: tl.rt.isRunning(),
+        frame: tl.rt.frame,
+        project: tl.project && tl.project.name,
+        entities: tl.rt.state.order.length,
         canvas: [document.querySelector('#player-canvas').width, document.querySelector('#player-canvas').height],
       };
     })()`);
@@ -95,7 +95,7 @@ app.whenReady().then(async () => {
     check('项目传过去了', r.ready && r.entities === 6, `${r.entities} 个实体 · 项目「${r.project}」`);
     check('自动在运行', r.running === true, 'running=' + r.running);
     await sleep(700);
-    const f2 = await prun(`window.__df.rt.frame`);
+    const f2 = await prun(`window.__tl.rt.frame`);
     check('帧在推进（不是在装样子）', f2 > r.frame + 3, `帧 ${r.frame} → ${f2}`);
     check('画布跟着窗口尺寸', r.canvas[0] > 400 && r.canvas[1] > 300, r.canvas.join('×'));
   }
@@ -121,23 +121,23 @@ app.whenReady().then(async () => {
   {
     const sendKey = async (type, keyCode) => { pw.webContents.sendInputEvent({ type, keyCode }); await sleep(60); };
     const before = await prun(`(() => {
-      const rt = window.__df.rt;
+      const rt = window.__tl.rt;
       rt.state.vars['生命'] = 9999;
       const p = rt.state.entities['玩家'];
       for (let i = 0; i < 90; i++) rt.step(1 / 60);
       return { x: p.x, y: p.y };
     })()`);
     await sendKey('keyDown', 'Right');
-    const held = await prun(`[...window.__df.rt.input.keys]`);
-    await prun(`(() => { const rt = window.__df.rt; for (let i = 0; i < 40; i++) rt.step(1/60); return 1; })()`);
+    const held = await prun(`[...window.__tl.rt.input.keys]`);
+    await prun(`(() => { const rt = window.__tl.rt; for (let i = 0; i < 40; i++) rt.step(1/60); return 1; })()`);
     await sendKey('keyUp', 'Right');
-    const movedX = await prun(`window.__df.rt.state.entities['玩家'].x`);
+    const movedX = await prun(`window.__tl.rt.state.entities['玩家'].x`);
     check('真实键盘进得了运行窗口', held.includes('ArrowRight'), 'keys=' + JSON.stringify(held));
     check('按住 → 角色往右走', movedX > before.x + 40, `x ${before.x.toFixed(0)} → ${movedX.toFixed(0)}`);
 
     await sendKey('keyDown', 'Space');
-    await prun(`(() => { window.__df.rt.step(1/60); return 1; })()`);
-    const vy = await prun(`window.__df.rt.state.entities['玩家'].vy`);
+    await prun(`(() => { window.__tl.rt.step(1/60); return 1; })()`);
+    const vy = await prun(`window.__tl.rt.state.entities['玩家'].vy`);
     await sendKey('keyUp', 'Space');
     check('按空格能起跳', vy > 100, 'vy=' + Number(vy).toFixed(0));
   }
@@ -147,39 +147,39 @@ app.whenReady().then(async () => {
   {
     await prun(`document.querySelector('#btn-player-pause').click()`);
     await sleep(200);
-    const paused = await prun(`({ paused: window.__df.rt.paused, label: document.querySelector('#btn-player-pause').textContent })`);
+    const paused = await prun(`({ paused: window.__tl.rt.paused, label: document.querySelector('#btn-player-pause').textContent })`);
     check('暂停按钮管用', paused.paused === true && /继续/.test(paused.label), JSON.stringify(paused));
     await prun(`document.querySelector('#btn-player-pause').click()`);
     await sleep(200);
-    const resumed = await prun(`window.__df.rt.paused`);
+    const resumed = await prun(`window.__tl.rt.paused`);
     check('再点继续', resumed === false, 'paused=' + resumed);
 
-    await prun(`(() => { window.__df.rt.state.vars['分数'] = 7; return 1; })()`);
+    await prun(`(() => { window.__tl.rt.state.vars['分数'] = 7; return 1; })()`);
     await prun(`document.querySelector('#btn-player-restart').click()`);
     await sleep(300);
-    const afterRestart = await prun(`({ 分数: window.__df.rt.state.vars['分数'], running: window.__df.rt.isRunning() })`);
+    const afterRestart = await prun(`({ 分数: window.__tl.rt.state.vars['分数'], running: window.__tl.rt.isRunning() })`);
     check('「重来」把状态重置回初始值', afterRestart.分数 === 0 && afterRestart.running === true, JSON.stringify(afterRestart));
   }
 
   /* ---- 6. 热重载 ---- */
   console.log('\n=== 6. 编辑器改完 → 运行窗口热重载 ===');
   {
-    await run(`(() => { window.__df.store.project.variables['冒烟热重载'] = { name: '冒烟热重载', value: 0 }; window.__df.store.commit('加变量'); return 1; })()`);
+    await run(`(() => { window.__tl.store.project.variables['冒烟热重载'] = { name: '冒烟热重载', value: 0 }; window.__tl.store.commit('加变量'); return 1; })()`);
     let got = null;
     for (let i = 0; i < 25; i++) {
       await sleep(200);
-      got = await prun(`!!(window.__df.project && window.__df.project.variables && window.__df.project.variables['冒烟热重载'])`);
+      got = await prun(`!!(window.__tl.project && window.__tl.project.variables && window.__tl.project.variables['冒烟热重载'])`);
       if (got) break;
     }
     check('改动推到了运行窗口', got === true, got ? '运行窗口里出现了新变量' : '一直没同步过去');
-    const stillRunning = await prun(`window.__df.rt.isRunning()`);
+    const stillRunning = await prun(`window.__tl.rt.isRunning()`);
     check('热重载之后还在跑', stillRunning === true, 'running=' + stillRunning);
   }
 
   /* ---- 7. 出图 ---- */
   {
     await prun(`(() => {
-      const rt = window.__df.rt;
+      const rt = window.__tl.rt;
       rt.state.vars['生命'] = 3; rt.state.vars['分数'] = 2;
       const p = rt.state.entities['玩家'];
       p.x = -40; p.y = -60; p.vx = 0; p.vy = 0;
@@ -211,7 +211,7 @@ app.whenReady().then(async () => {
     let reset = false;
     for (let i = 0; i < 20 && !reset; i++) {
       await sleep(150);
-      reset = await run(`({ open: window.__df.playerOpen, on: document.querySelector('#btn-player').classList.contains('on') })`)
+      reset = await run(`({ open: window.__tl.playerOpen, on: document.querySelector('#btn-player').classList.contains('on') })`)
         .then((r) => r.open === false && r.on === false).catch(() => false);
     }
     check('编辑器里按钮状态复位了', reset, 'playerOpen=false / 按钮去掉高亮');

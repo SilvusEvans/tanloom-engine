@@ -1,5 +1,5 @@
 /**
- * DualForge — 积木定义表
+ * Tanloom Engine — 积木定义表
  * ================================================================
  * 每一块积木在这里只定义一次，然后同时驱动：
  *   · 积木视图的外观（label 中的 [ ] ( ) < > { } 标记决定形状与插槽）
@@ -57,7 +57,7 @@ const A = {
   sel: (options, v, width = 74) => ({ slot: 'field', kind: 'select', options, def: v, width }),
   color: (v = '#FFD500') => ({ slot: 'field', kind: 'color', def: v, width: 62 }),
   sub: () => ({ slot: 'sub' }),
-  code: (v = '// 任意 TS 代码，可读写 self / vars / df') => ({ slot: 'field', kind: 'code', def: v, width: 120 })
+  code: (v = '// 任意 TS 代码，可读写 self / vars / tl') => ({ slot: 'field', kind: 'code', def: v, width: 120 })
 };
 
 /* ------------------------------------------------------------------ */
@@ -123,7 +123,7 @@ export const STATEMENT_DEFS = [
     op: 'Wait', id: 'control_wait', kind: 'statement', category: 'control',
     label: '等待 (SEC) 秒',
     args: { SEC: A.num(1) },
-    gen: (n, g) => [`${g.ind()}await df.wait(${g.e(n.sec)});`],
+    gen: (n, g) => [`${g.ind()}await tl.wait(${g.e(n.sec)});`],
     run: (n, c) => c.wait(c.num(n.sec))
   },
   {
@@ -148,7 +148,7 @@ export const STATEMENT_DEFS = [
     op: 'Forever', id: 'control_forever', kind: 'cblock', category: 'control',
     label: '一直重复 {BODY}',
     args: { BODY: A.sub() },
-    gen: (n, g) => [`${g.ind()}while (true) {`, ...g.seq(n.body, g.level + 1), `${g.ind()}  await df.tick();`, `${g.ind()}}`],
+    gen: (n, g) => [`${g.ind()}while (true) {`, ...g.seq(n.body, g.level + 1), `${g.ind()}  await tl.tick();`, `${g.ind()}}`],
     run: (n, c) => {
       const loop = () => {
         if (!c.rt.running) return undefined;
@@ -164,7 +164,7 @@ export const STATEMENT_DEFS = [
     op: 'RepeatUntil', id: 'control_repeat_until', kind: 'cblock', category: 'control',
     label: '重复直到 <COND> {BODY}',
     args: { COND: A.bool(), BODY: A.sub() },
-    gen: (n, g) => [`${g.ind()}while (!(${g.e(n.cond)})) {`, ...g.seq(n.body, g.level + 1), `${g.ind()}  await df.tick();`, `${g.ind()}}`],
+    gen: (n, g) => [`${g.ind()}while (!(${g.e(n.cond)})) {`, ...g.seq(n.body, g.level + 1), `${g.ind()}  await tl.tick();`, `${g.ind()}}`],
     run: (n, c) => {
       const loop = () => {
         if (!c.rt.running || c.bool(n.cond)) return undefined;
@@ -197,28 +197,28 @@ export const STATEMENT_DEFS = [
     op: 'StopScripts', id: 'control_stop', kind: 'cap', category: 'control',
     label: '停止 [TARGET]',
     args: { TARGET: A.sel(STOP_OPTIONS, 'all') },
-    gen: (n, g) => [`${g.ind()}df.stop(${g.q(n.target)});`],
+    gen: (n, g) => [`${g.ind()}tl.stop(${g.q(n.target)});`],
     run: (n, c) => { c.rt.stopScripts(n.target); }
   },
   {
     op: 'Clone', id: 'control_clone', kind: 'statement', category: 'control',
     label: '克隆 [ENTITY]',
     args: { ENTITY: A.ent() },
-    gen: (n, g) => [`${g.ind()}df.clone(${g.ent(n.entity)});`],
+    gen: (n, g) => [`${g.ind()}tl.clone(${g.ent(n.entity)});`],
     run: (n, c) => { c.rt.clone(c.ent(n.entity)); }
   },
   {
     op: 'DeleteClone', id: 'control_delete_clone', kind: 'cap', category: 'control',
     label: '删除此克隆体',
     args: {},
-    gen: (n, g) => [`${g.ind()}df.deleteClone();`],
+    gen: (n, g) => [`${g.ind()}tl.deleteClone();`],
     run: (n, c) => { c.rt.deleteClone(c.self); throw new c.rt.ScriptStop('delete-clone'); }
   },
   {
     op: 'Broadcast', id: 'control_broadcast', kind: 'statement', category: 'control',
     label: '广播 [CHANNEL] 带 (VALUE)',
     args: { CHANNEL: A.chan('玩家受伤'), VALUE: A.num(10) },
-    gen: (n, g) => [`${g.ind()}df.broadcast(${g.q(n.channel)}, ${g.e(n.value)});`],
+    gen: (n, g) => [`${g.ind()}tl.broadcast(${g.q(n.channel)}, ${g.e(n.value)});`],
     run: (n, c) => { c.rt.broadcast(n.channel, c.num(n.value), c.self); }
   },
   {
@@ -227,7 +227,7 @@ export const STATEMENT_DEFS = [
     op: 'SetSubscribed', id: 'control_set_subscribed', kind: 'statement', category: 'control',
     label: '将 [CHANNEL] 广播订阅状态设为 [STATE]',
     args: { CHANNEL: A.chan('update'), STATE: A.sel(SUBSCRIBE_OPTIONS, 'subscribe') },
-    gen: (n, g) => [`${g.ind()}df.setSubscribed(${g.q(n.channel)}, ${n.state === 'subscribe' ? 'true' : 'false'});`],
+    gen: (n, g) => [`${g.ind()}tl.setSubscribed(${g.q(n.channel)}, ${n.state === 'subscribe' ? 'true' : 'false'});`],
     run: (n, c) => { c.rt.setSubscribed(c.self, n.channel, n.state === 'subscribe'); },
     doc: '控制「自己」在这个广播频道上的脚本要不要响应；取消订阅会顺手停掉正在跑的那条'
   },
@@ -235,7 +235,7 @@ export const STATEMENT_DEFS = [
     op: 'BroadcastAndWait', id: 'control_broadcast_wait', kind: 'cblock', category: 'control',
     label: '广播 [CHANNEL] 带 (VALUE) 并等待 {BODY}',
     args: { CHANNEL: A.chan('玩家受伤'), VALUE: A.num(10), BODY: A.sub() },
-    gen: (n, g) => [`${g.ind()}await df.broadcastAndWait(${g.q(n.channel)}, ${g.e(n.value)});`],
+    gen: (n, g) => [`${g.ind()}await tl.broadcastAndWait(${g.q(n.channel)}, ${g.e(n.value)});`],
     run: (n, c) => c.rt.broadcastAndWait(n.channel, c.num(n.value), c.self)
   },
 
@@ -244,18 +244,18 @@ export const STATEMENT_DEFS = [
     op: 'MoveBy', id: 'motion_move', kind: 'statement', category: 'motion',
     label: '移动 [ENTITY] 水平 (DX) 垂直 (DY)',
     args: { ENTITY: A.ent(), DX: A.num(0), DY: A.num(0) },
-    // 生成单条 df.moveBy(...) 而不是拆成 `self.x += …; self.y += …;`：
+    // 生成单条 tl.moveBy(...) 而不是拆成 `self.x += …; self.y += …;`：
     // 拆开之后「1 块积木」变成「2 条语句」，代码视图里再保存回来就会得到两块
     // 「将 x 坐标增加」——积木形状和原来对不上了。parser 里本来就有
-    // `df.moveBy` 的反解规则，用它才对得上。
-    gen: (n, g) => [`${g.ind()}df.moveBy(${g.ent(n.entity)}, ${g.e(n.dx)}, ${g.e(n.dy)});`],
+    // `tl.moveBy` 的反解规则，用它才对得上。
+    gen: (n, g) => [`${g.ind()}tl.moveBy(${g.ent(n.entity)}, ${g.e(n.dx)}, ${g.e(n.dy)});`],
     run: (n, c) => { const t = c.ent(n.entity); t.x += c.num(n.dx); t.y += c.num(n.dy); }
   },
   {
     op: 'SetPosition', id: 'motion_set_pos', kind: 'statement', category: 'motion',
     label: '把 [ENTITY] 移到 x: (X) y: (Y)',
     args: { ENTITY: A.ent(), X: A.num(0), Y: A.num(0) },
-    gen: (n, g) => [`${g.ind()}df.setPosition(${g.ent(n.entity)}, ${g.e(n.x)}, ${g.e(n.y)});`],
+    gen: (n, g) => [`${g.ind()}tl.setPosition(${g.ent(n.entity)}, ${g.e(n.x)}, ${g.e(n.y)});`],
     run: (n, c) => { const t = c.ent(n.entity); t.x = c.num(n.x); t.y = c.num(n.y); }
   },
   {
@@ -305,28 +305,28 @@ export const STATEMENT_DEFS = [
     op: 'SetVelocity', id: 'motion_set_velocity', kind: 'statement', category: 'motion',
     label: '设置 [ENTITY] 的速度 vx: (VX) vy: (VY)',
     args: { ENTITY: A.ent(), VX: A.num(0), VY: A.num(0) },
-    gen: (n, g) => [`${g.ind()}df.setVelocity(${g.ent(n.entity)}, ${g.e(n.vx)}, ${g.e(n.vy)});`],
+    gen: (n, g) => [`${g.ind()}tl.setVelocity(${g.ent(n.entity)}, ${g.e(n.vx)}, ${g.e(n.vy)});`],
     run: (n, c) => { const t = c.ent(n.entity); t.vx = c.num(n.vx); t.vy = c.num(n.vy); }
   },
   {
     op: 'Jump', id: 'motion_jump', kind: 'statement', category: 'motion',
     label: '让 [ENTITY] 跳跃 力度 (POWER)',
     args: { ENTITY: A.ent(), POWER: A.num(380) },
-    gen: (n, g) => [`${g.ind()}df.jump(${g.ent(n.entity)}, ${g.e(n.power)});`],
+    gen: (n, g) => [`${g.ind()}tl.jump(${g.ent(n.entity)}, ${g.e(n.power)});`],
     run: (n, c) => { const t = c.ent(n.entity); t.vy = c.num(n.power); t.grounded = false; }
   },
   {
     op: 'SetGravity', id: 'motion_gravity', kind: 'statement', category: 'motion',
     label: '设置 [ENTITY] 的重力为 (G)',
     args: { ENTITY: A.ent(), G: A.num(1400) },
-    gen: (n, g) => [`${g.ind()}df.setGravity(${g.ent(n.entity)}, ${g.e(n.g)});`],
+    gen: (n, g) => [`${g.ind()}tl.setGravity(${g.ent(n.entity)}, ${g.e(n.g)});`],
     run: (n, c) => { c.ent(n.entity).gravity = c.num(n.g); }
   },
   {
     op: 'BounceOnEdge', id: 'motion_bounce', kind: 'statement', category: 'motion',
     label: '[ENTITY] 碰到边缘就反弹',
     args: { ENTITY: A.ent() },
-    gen: (n, g) => [`${g.ind()}df.bounce(${g.ent(n.entity)});`],
+    gen: (n, g) => [`${g.ind()}tl.bounce(${g.ent(n.entity)});`],
     run: (n, c) => { c.rt.bounce(c.ent(n.entity)); }
   },
 
@@ -377,7 +377,7 @@ export const STATEMENT_DEFS = [
     op: 'Say', id: 'looks_say', kind: 'statement', category: 'looks',
     label: '让 [ENTITY] 说 (TEXT) (SEC) 秒',
     args: { ENTITY: A.ent(), TEXT: A.text('你好'), SEC: A.num(2) },
-    gen: (n, g) => [`${g.ind()}df.say(${g.ent(n.entity)}, ${g.e(n.text)}, ${g.e(n.sec)});`],
+    gen: (n, g) => [`${g.ind()}tl.say(${g.ent(n.entity)}, ${g.e(n.text)}, ${g.e(n.sec)});`],
     run: (n, c) => { c.rt.say(c.ent(n.entity), c.str(n.text), c.num(n.sec)); }
   },
   {
@@ -393,21 +393,21 @@ export const STATEMENT_DEFS = [
     op: 'PlaySound', id: 'sound_play', kind: 'statement', category: 'sound',
     label: '播放声音 [NAME]',
     args: { NAME: A.sel(SOUND_OPTIONS, 'beep') },
-    gen: (n, g) => [`${g.ind()}df.playSound(${g.q(n.name)});`],
+    gen: (n, g) => [`${g.ind()}tl.playSound(${g.q(n.name)});`],
     run: (n, c) => { c.rt.playSound(n.name); }
   },
   {
     op: 'StopAllSounds', id: 'sound_stop', kind: 'statement', category: 'sound',
     label: '停止所有声音',
     args: {},
-    gen: (n, g) => [`${g.ind()}df.stopAllSounds();`],
+    gen: (n, g) => [`${g.ind()}tl.stopAllSounds();`],
     run: (n, c) => { c.rt.stopAllSounds(); }
   },
   {
     op: 'SetVolume', id: 'sound_volume', kind: 'statement', category: 'sound',
     label: '把音量设为 (V) %',
     args: { V: A.num(100) },
-    gen: (n, g) => [`${g.ind()}df.volume(${g.e(n.v)} / 100);`],
+    gen: (n, g) => [`${g.ind()}tl.volume(${g.e(n.v)} / 100);`],
     run: (n, c) => { c.rt.setVolume(c.num(n.v) / 100); }
   },
 
@@ -416,7 +416,7 @@ export const STATEMENT_DEFS = [
     op: 'ResetTimer', id: 'sensing_reset_timer', kind: 'statement', category: 'sensing',
     label: '重置计时器',
     args: {},
-    gen: (n, g) => [`${g.ind()}df.resetTimer();`],
+    gen: (n, g) => [`${g.ind()}tl.resetTimer();`],
     run: (n, c) => { c.rt.resetTimer(); }
   },
 
@@ -439,14 +439,14 @@ export const STATEMENT_DEFS = [
     op: 'ShowVar', id: 'var_show', kind: 'statement', category: 'variables',
     label: '显示变量 [NAME]',
     args: { NAME: A.vari('分数') },
-    gen: (n, g) => [`${g.ind()}df.monitor(${g.q(n.name)}, true);`],
+    gen: (n, g) => [`${g.ind()}tl.monitor(${g.q(n.name)}, true);`],
     run: (n, c) => { c.rt.monitor(n.name, true); }
   },
   {
     op: 'HideVar', id: 'var_hide', kind: 'statement', category: 'variables',
     label: '隐藏变量 [NAME]',
     args: { NAME: A.vari('分数') },
-    gen: (n, g) => [`${g.ind()}df.monitor(${g.q(n.name)}, false);`],
+    gen: (n, g) => [`${g.ind()}tl.monitor(${g.q(n.name)}, false);`],
     run: (n, c) => { c.rt.monitor(n.name, false); }
   },
 
@@ -490,14 +490,14 @@ export const STATEMENT_DEFS = [
     op: 'ListShow', id: 'list_show', kind: 'statement', category: 'lists',
     label: '显示列表 [LIST]',
     args: { LIST: A.list('存档点') },
-    gen: (n, g) => [`${g.ind()}df.monitor(${g.q('list:' + n.list)}, true);`],
+    gen: (n, g) => [`${g.ind()}tl.monitor(${g.q('list:' + n.list)}, true);`],
     run: (n, c) => { c.rt.monitor('list:' + n.list, true); }
   },
   {
     op: 'ListHide', id: 'list_hide', kind: 'statement', category: 'lists',
     label: '隐藏列表 [LIST]',
     args: { LIST: A.list('存档点') },
-    gen: (n, g) => [`${g.ind()}df.monitor(${g.q('list:' + n.list)}, false);`],
+    gen: (n, g) => [`${g.ind()}tl.monitor(${g.q('list:' + n.list)}, false);`],
     run: (n, c) => { c.rt.monitor('list:' + n.list, false); }
   },
 
@@ -506,63 +506,63 @@ export const STATEMENT_DEFS = [
     op: 'SwitchScene', id: 'game_switch_scene', kind: 'statement', category: 'game',
     label: '切换到场景 [NAME]',
     args: { NAME: A.text('场景 2') },
-    gen: (n, g) => [`${g.ind()}df.switchScene(${g.e(n.name)});`],
+    gen: (n, g) => [`${g.ind()}tl.switchScene(${g.e(n.name)});`],
     run: (n, c) => { c.rt.switchScene(c.str(n.name)); }
   },
   {
     op: 'SaveGame', id: 'game_save', kind: 'statement', category: 'game',
     label: '存档到 [SLOT]',
     args: { SLOT: A.text('slot1') },
-    gen: (n, g) => [`${g.ind()}df.save(${g.e(n.slot)});`],
+    gen: (n, g) => [`${g.ind()}tl.save(${g.e(n.slot)});`],
     run: (n, c) => { c.rt.saveSlot(c.str(n.slot)); }
   },
   {
     op: 'LoadGame', id: 'game_load', kind: 'statement', category: 'game',
     label: '读取存档 [SLOT]',
     args: { SLOT: A.text('slot1') },
-    gen: (n, g) => [`${g.ind()}df.load(${g.e(n.slot)});`],
+    gen: (n, g) => [`${g.ind()}tl.load(${g.e(n.slot)});`],
     run: (n, c) => { c.rt.loadSlot(c.str(n.slot)); }
   },
   {
     op: 'CameraFollow', id: 'game_camera', kind: 'statement', category: 'game',
     label: '让相机跟随 [ENTITY] 平滑 (K)',
     args: { ENTITY: A.ent(), K: A.num(0.12) },
-    gen: (n, g) => [`${g.ind()}df.cameraFollow(${g.ent(n.entity)}, ${g.e(n.k)});`],
+    gen: (n, g) => [`${g.ind()}tl.cameraFollow(${g.ent(n.entity)}, ${g.e(n.k)});`],
     run: (n, c) => { c.rt.cameraFollow(c.ent(n.entity), c.num(n.k)); }
   },
   {
     op: 'EmitParticles', id: 'game_particles', kind: 'statement', category: 'game',
     label: '在 [ENTITY] 处播放 (N) 个粒子 颜色 [COLOR]',
     args: { ENTITY: A.ent(), N: A.num(12), COLOR: A.color('#FFD500') },
-    gen: (n, g) => [`${g.ind()}df.particles(${g.ent(n.entity)}, ${g.e(n.n)}, ${g.q(n.color)});`],
+    gen: (n, g) => [`${g.ind()}tl.particles(${g.ent(n.entity)}, ${g.e(n.n)}, ${g.q(n.color)});`],
     run: (n, c) => { c.rt.particles(c.ent(n.entity), c.num(n.n), n.color); }
   },
   {
     op: 'UISetText', id: 'game_ui_set', kind: 'statement', category: 'game',
     label: '把 HUD 文字设为 (TEXT)',
     args: { TEXT: A.text('分数: 0') },
-    gen: (n, g) => [`${g.ind()}df.hud(${g.e(n.text)});`],
+    gen: (n, g) => [`${g.ind()}tl.hud(${g.e(n.text)});`],
     run: (n, c) => { c.rt.hud(c.str(n.text)); }
   },
   {
     op: 'ShakeScreen', id: 'game_shake', kind: 'statement', category: 'game',
     label: '屏幕震动 强度 (N)',
     args: { N: A.num(8) },
-    gen: (n, g) => [`${g.ind()}df.shake(${g.e(n.n)});`],
+    gen: (n, g) => [`${g.ind()}tl.shake(${g.e(n.n)});`],
     run: (n, c) => { c.rt.shake(c.num(n.n)); }
   },
   {
     op: 'SpawnEntity', id: 'game_spawn', kind: 'statement', category: 'game',
     label: '生成 [ENTITY] 于 x: (X) y: (Y)',
     args: { ENTITY: A.ent('敌人'), X: A.num(0), Y: A.num(0) },
-    gen: (n, g) => [`${g.ind()}df.spawn(${g.q(n.entity)}, ${g.e(n.x)}, ${g.e(n.y)});`],
+    gen: (n, g) => [`${g.ind()}tl.spawn(${g.q(n.entity)}, ${g.e(n.x)}, ${g.e(n.y)});`],
     run: (n, c) => { c.rt.spawn(n.entity, c.num(n.x), c.num(n.y)); }
   },
   {
     op: 'DestroyEntity', id: 'game_destroy', kind: 'statement', category: 'game',
     label: '销毁 [ENTITY]',
     args: { ENTITY: A.ent() },
-    gen: (n, g) => [`${g.ind()}df.destroy(${g.ent(n.entity)});`],
+    gen: (n, g) => [`${g.ind()}tl.destroy(${g.ent(n.entity)});`],
     run: (n, c) => { c.rt.destroy(c.ent(n.entity)); }
   },
 
@@ -598,7 +598,7 @@ export const EXPR_DEFS = [
     gen: (n, g) => `(${g.e(n.left)} % ${g.e(n.right)})`, run: (n, c) => { const d = c.num(n.right); return d === 0 ? 0 : c.num(n.left) % d; } },
   { op: 'Random', id: 'op_random', kind: 'reporter', category: 'operators', label: '在 (FROM) 到 (TO) 之间取随机数',
     args: { FROM: A.num(1), TO: A.num(10) },
-    gen: (n, g) => `df.random(${g.e(n.from)}, ${g.e(n.to)})`,
+    gen: (n, g) => `tl.random(${g.e(n.from)}, ${g.e(n.to)})`,
     run: (n, c) => { const a = Math.ceil(c.num(n.from)); const b = Math.floor(c.num(n.to)); return a + Math.floor(Math.random() * Math.max(1, b - a + 1)); } },
   { op: 'Compare', id: 'op_gt', kind: 'boolean', category: 'operators', label: '(LEFT) > (RIGHT)',
     args: { LEFT: A.num(0), RIGHT: A.num(0) }, fixOp: '>',
@@ -626,7 +626,7 @@ export const EXPR_DEFS = [
     gen: (n, g) => `(-(${g.e(n.a)}))`, run: (n, c) => -c.num(n.a) },
   { op: 'MathOp', id: 'op_math', kind: 'reporter', category: 'operators', label: '[OP] (X)',
     args: { OP: A.sel(MATH_OPTIONS, 'abs', 84), X: A.num(0) },
-    gen: (n, g) => `df.math(${g.q(n.op)}, ${g.e(n.x)})`,
+    gen: (n, g) => `tl.math(${g.q(n.op)}, ${g.e(n.x)})`,
     run: (n, c) => {
       const x = c.num(n.x);
       switch (n.op) {
@@ -645,38 +645,38 @@ export const EXPR_DEFS = [
     } },
   { op: 'Join', id: 'op_join', kind: 'reporter', category: 'operators', label: '连接 (A) (B)',
     args: { A: A.text('苹果'), B: A.text('香蕉') },
-    gen: (n, g) => `df.join(${g.e(n.a)}, ${g.e(n.b)})`, run: (n, c) => c.str(n.a) + c.str(n.b) },
+    gen: (n, g) => `tl.join(${g.e(n.a)}, ${g.e(n.b)})`, run: (n, c) => c.str(n.a) + c.str(n.b) },
   { op: 'LetterOf', id: 'op_letter', kind: 'reporter', category: 'operators', label: '(A) 的第 (I) 个字符',
     args: { A: A.text('世界'), I: A.num(1) },
-    gen: (n, g) => `df.letterOf(${g.e(n.a)}, ${g.e(n.i)})`,
+    gen: (n, g) => `tl.letterOf(${g.e(n.a)}, ${g.e(n.i)})`,
     run: (n, c) => { const s = c.str(n.a); const i = Math.floor(c.num(n.i)) - 1; return i >= 0 && i < s.length ? s[i] : ''; } },
   { op: 'LengthOf', id: 'op_length', kind: 'reporter', category: 'operators', label: '(A) 的长度',
     args: { A: A.text('世界') },
-    gen: (n, g) => `df.lengthOf(${g.e(n.a)})`, run: (n, c) => c.str(n.a).length },
+    gen: (n, g) => `tl.lengthOf(${g.e(n.a)})`, run: (n, c) => c.str(n.a).length },
   { op: 'Contains', id: 'op_contains', kind: 'boolean', category: 'operators', label: '(A) 包含 (B) ?',
     args: { A: A.text('苹果'), B: A.text('果') },
-    gen: (n, g) => `df.contains(${g.e(n.a)}, ${g.e(n.b)})`, run: (n, c) => c.str(n.a).includes(c.str(n.b)) },
+    gen: (n, g) => `tl.contains(${g.e(n.a)}, ${g.e(n.b)})`, run: (n, c) => c.str(n.a).includes(c.str(n.b)) },
 
   /* 侦测 */
   { op: 'Touching', id: 'sen_touching', kind: 'boolean', category: 'sensing', label: '[A] 碰到 [B] ?',
     args: { A: A.ent(), B: A.ent('地面') },
-    gen: (n, g) => `df.touching(ctx, ${g.ent(n.a)}, ${g.ent(n.b)})`,
+    gen: (n, g) => `tl.touching(ctx, ${g.ent(n.a)}, ${g.ent(n.b)})`,
     run: (n, c) => c.rt.touching(c.ent(n.a), c.ent(n.b)) },
   { op: 'DistanceTo', id: 'sen_distance', kind: 'reporter', category: 'sensing', label: '[A] 到 [B] 的距离',
     args: { A: A.ent(), B: A.ent('敌人') },
-    gen: (n, g) => `df.distanceTo(${g.ent(n.a)}, ${g.ent(n.b)})`,
+    gen: (n, g) => `tl.distanceTo(${g.ent(n.a)}, ${g.ent(n.b)})`,
     run: (n, c) => { const a = c.ent(n.a); const b = c.ent(n.b); return Math.round(Math.hypot(a.x - b.x, a.y - b.y)); } },
   { op: 'KeyDown', id: 'sen_key', kind: 'boolean', category: 'sensing', label: '按键 [KEY] 被按下?',
     args: { KEY: A.key('Space') },
-    gen: (n, g) => `df.keyDown(${g.q(n.key)})`, run: (n, c) => c.rt.keyDownCheck(n.key) },
+    gen: (n, g) => `tl.keyDown(${g.q(n.key)})`, run: (n, c) => c.rt.keyDownCheck(n.key) },
   { op: 'MouseDown', id: 'sen_mousedown', kind: 'boolean', category: 'sensing', label: '鼠标被按下?',
-    args: {}, gen: () => 'df.mouseDown()', run: (n, c) => !!c.input.mouseDown },
+    args: {}, gen: () => 'tl.mouseDown()', run: (n, c) => !!c.input.mouseDown },
   { op: 'MouseX', id: 'sen_mousex', kind: 'reporter', category: 'sensing', label: '鼠标的 x 坐标',
-    args: {}, gen: () => 'df.mouseX()', run: (n, c) => c.input.mouseX },
+    args: {}, gen: () => 'tl.mouseX()', run: (n, c) => c.input.mouseX },
   { op: 'MouseY', id: 'sen_mousey', kind: 'reporter', category: 'sensing', label: '鼠标的 y 坐标',
-    args: {}, gen: () => 'df.mouseY()', run: (n, c) => c.input.mouseY },
+    args: {}, gen: () => 'tl.mouseY()', run: (n, c) => c.input.mouseY },
   { op: 'Timer', id: 'sen_timer', kind: 'reporter', category: 'sensing', label: '计时器',
-    args: {}, gen: () => 'df.timer()', run: (n, c) => c.rt.timer() },
+    args: {}, gen: () => 'tl.timer()', run: (n, c) => c.rt.timer() },
   { op: 'GetProp', id: 'sen_prop', kind: 'reporter', category: 'sensing', label: '[ENTITY] 的 [PROP]',
     args: { ENTITY: A.ent(), PROP: A.sel(PROP_OPTIONS, 'x', 82) },
     gen: (n, g) => `${g.ent(n.entity)}.${n.prop}`,
@@ -701,18 +701,18 @@ export const EXPR_DEFS = [
     gen: (n, g) => `${g.listRef(n.list)}.length`, run: (n, c) => c.getList(n.list).length },
   { op: 'ListIndex', id: 'list_index', kind: 'reporter', category: 'lists', label: '[LIST] 中第一个 (V) 的位置',
     args: { LIST: A.list('存档点'), V: A.num(0) },
-    gen: (n, g) => `df.listIndex(${g.q(n.list)}, ${g.e(n.v)})`,
+    gen: (n, g) => `tl.listIndex(${g.q(n.list)}, ${g.e(n.v)})`,
     run: (n, c) => { const l = c.getList(n.list); const i = l.findIndex((x) => String(x) === String(c.num(n.v))); return i < 0 ? 0 : i + 1; } },
   { op: 'ListContains', id: 'list_contains', kind: 'boolean', category: 'lists', label: '[LIST] 包含 (V) ?',
     args: { LIST: A.list('存档点'), V: A.num(0) },
-    gen: (n, g) => `df.listContains(${g.q(n.list)}, ${g.e(n.v)})`,
+    gen: (n, g) => `tl.listContains(${g.q(n.list)}, ${g.e(n.v)})`,
     run: (n, c) => c.getList(n.list).some((x) => String(x) === String(c.num(n.v))) },
 
   /* 游戏专用 */
   { op: 'CurrentScene', id: 'game_scene', kind: 'reporter', category: 'game', label: '当前场景名',
-    args: {}, gen: () => 'df.sceneName()', run: (n, c) => c.rt.state.scene },
+    args: {}, gen: () => 'tl.sceneName()', run: (n, c) => c.rt.state.scene },
   { op: 'CloneCount', id: 'game_clones', kind: 'reporter', category: 'game', label: '克隆体数量',
-    args: {}, gen: () => 'df.cloneCount()', run: (n, c) => c.rt.cloneCount() },
+    args: {}, gen: () => 'tl.cloneCount()', run: (n, c) => c.rt.cloneCount() },
 
   /* 代码积木 */
   { op: 'CodeBlock', id: 'code_expr', kind: 'reporter', category: 'myblocks', label: '⚙ 代码表达式 (CODE)',

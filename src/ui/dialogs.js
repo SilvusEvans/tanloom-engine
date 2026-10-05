@@ -1,5 +1,5 @@
 /**
- * DualForge — 通用 UI 组件：菜单 / 内联编辑 / 对话框 / 轻提示
+ * Tanloom Engine — 通用 UI 组件：菜单 / 内联编辑 / 对话框 / 轻提示
  */
 
 const popupLayer = () => document.getElementById('popup-layer');

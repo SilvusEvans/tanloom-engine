@@ -1,5 +1,5 @@
 /**
- * DualForge — IR ↔ Scratch 积木 映射表
+ * Tanloom Engine — IR ↔ Scratch 积木 映射表
  * ================================================================
  * 积木视图现在用的是 Scratch 官方渲染器（scratch-blocks），所以「画积木」这件事
  * 不用我们操心；真正要做的是把 IR 和积木 XML 对上。

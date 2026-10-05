@@ -14,7 +14,7 @@ const { registerScheme, installHandler, APP_URL } = require('../app-protocol.cjs
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('no-sandbox');
-app.setPath('userData', path.join(require('os').tmpdir(), 'dualforge-ui'));
+app.setPath('userData', path.join(require('os').tmpdir(), 'tanloom-ui'));
 registerScheme();
 const ROOT = path.join(__dirname, '..');
 
@@ -56,7 +56,7 @@ app.whenReady().then(async () => {
 
   /* 1. 点「＋ 分类」按钮，把表单填完提交 */
   const cat = await run(`(async () => {
-    const df = window.__df;
+    const tl = window.__tl;
     document.querySelector('#btn-new-category').click();
     await new Promise(r => setTimeout(r, 220));
     const modal = document.querySelector('.modal-back');
@@ -67,7 +67,7 @@ app.whenReady().then(async () => {
     ins[2].value = '⚔';
     modal.querySelectorAll('.foot button')[1].click();
     await new Promise(r => setTimeout(r, 500));
-    const c = Object.values(df.store.project.categories).find(x => x.name === '战斗系统X');
+    const c = Object.values(tl.store.project.categories).find(x => x.name === '战斗系统X');
     return { id: c && c.id, color: c && c.color, icon: c && c.icon };
   })()`);
   check('新建分类写入 IR', !!cat.id, `id=${cat.id} color=${cat.color} icon=${cat.icon}`);
@@ -101,7 +101,7 @@ app.whenReady().then(async () => {
 
   /* 3. 右键一块积木 —— 用真的鼠标右键事件 */
   const rect = await run(`(() => {
-    const b = window.__df.ws.ws.getAllBlocks(false).find(x => x.previousConnection && !x.outputConnection);
+    const b = window.__tl.ws.ws.getAllBlocks(false).find(x => x.previousConnection && !x.outputConnection);
     const r = b.getSvgRoot().getBoundingClientRect();
     return { x: Math.round(r.left + 24), y: Math.round(r.top + 20), type: b.type };
   })()`);
@@ -120,8 +120,8 @@ app.whenReady().then(async () => {
 
   /* 4. 走完整对话框，把积木合到刚建的新分类里（这块最容易崩） */
   const made = await run(`(async () => {
-    const df = window.__df;
-    const ws = df.ws;
+    const tl = window.__tl;
+    const ws = tl.ws;
     const blk = ws.ws.getAllBlocks(false).find(x => x.previousConnection && !x.outputConnection);
     ws.openMacroDialogFor(blk);
     await new Promise(r => setTimeout(r, 260));
@@ -134,7 +134,7 @@ app.whenReady().then(async () => {
     if (target) sel.value = target.value;
     modal.querySelectorAll('.foot button')[1].click();
     await new Promise(r => setTimeout(r, 800));
-    const m = Object.values(df.store.project.macros).find(x => x.name === '攻击');
+    const m = Object.values(tl.store.project.macros).find(x => x.name === '攻击');
     return {
       opts, category: m && m.category, macroId: m && m.id,
       inWorkspace: ws.ws.getAllBlocks(false).filter(b => b.type.startsWith('df_macro_')).map(b => b.type),
@@ -155,10 +155,10 @@ app.whenReady().then(async () => {
     if (!row) return { err: '选择区里找不到这个分类' };
     row.click();
     await new Promise(r => setTimeout(r, 600));
-    const fly = window.__df.ws.ws.getFlyout();
+    const fly = window.__tl.ws.ws.getFlyout();
     const bs = fly && fly.getWorkspace ? fly.getWorkspace().getAllBlocks(false) : [];
     // 连续工具箱：所有分类共用一个飞出面板，所以按「新分类里的积木有没有出现」来判断
-    const wanted = window.__df.store.project.macros['macro_x'];
+    const wanted = window.__tl.store.project.macros['macro_x'];
     return { count: bs.length, total: bs.length,
              styled: bs.filter(b => !!b.getSvgRoot()).length,
              hasNew: bs.some(b => b.type.startsWith('df_macro_')) };
@@ -169,7 +169,7 @@ app.whenReady().then(async () => {
 
   /* 6. 点选择区里的「＋ 新建积木」按钮，从零造一块 */
   const scratch = await run(`(async () => {
-    const df = window.__df;
+    const tl = window.__tl;
     const btn = [...document.querySelectorAll('#blockly-host .blocklyFlyoutButton')]
       .find(b => b.textContent.includes('新建积木'));
     if (!btn) return { err: '选择区里没有「新建积木」按钮' };
@@ -189,8 +189,8 @@ app.whenReady().then(async () => {
     if (sel) sel.value = ${JSON.stringify(cat.id || '')};
     modal.querySelectorAll('.foot button')[1].click();
     await new Promise(r2 => setTimeout(r2, 800));
-    const m = Object.values(df.store.project.macros).find(x => x.name === '闪避');
-    const blocks = df.ws.ws.getAllBlocks(false).filter(b => b.type.startsWith('df_macro_')).map(b => b.type);
+    const m = Object.values(tl.store.project.macros).find(x => x.name === '闪避');
+    const blocks = tl.ws.ws.getAllBlocks(false).filter(b => b.type.startsWith('df_macro_')).map(b => b.type);
     return { macroId: m && m.id, category: m && m.category, body: m && m.body && m.body.type, blocks };
   })()`);
   check('从零新建积木（选分类→＋ 新建积木→命名）',
@@ -216,9 +216,9 @@ app.whenReady().then(async () => {
 
   // (a) 从选择区的「＋ 新建积木」打开对话框 —— 这就是「新建积木」的界面
   const opened = await run(`(async () => {
-    const df = window.__df;
-    const cat = Object.values(df.store.project.categories).find(x => x.name === '战斗系统X');
-    df.ws.createMacroIn(cat.id);
+    const tl = window.__tl;
+    const cat = Object.values(tl.store.project.categories).find(x => x.name === '战斗系统X');
+    tl.ws.createMacroIn(cat.id);
     await new Promise(r => setTimeout(r, 700));
     const modal = document.querySelector('.modal-back');
     return modal ? document.querySelectorAll('.modal-back').length : 0;

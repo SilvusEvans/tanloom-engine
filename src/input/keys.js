@@ -1,5 +1,5 @@
 /**
- * DualForge — 键盘输入层
+ * Tanloom Engine — 键盘输入层
  * ================================================================
  * 运行时靠 `input.keys`（键名用 `KeyboardEvent.code`，如 Space / ArrowRight / KeyW）。
  * 这一层负责两件事：

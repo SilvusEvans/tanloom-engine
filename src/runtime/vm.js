@@ -1,5 +1,5 @@
 /**
- * DualForge — 运行时
+ * Tanloom Engine — 运行时
  * ================================================================
  * 策划案 §5：每帧按固定阶段推进，每个阶段广播一次，脚本订阅自己关心的广播。
  * 引擎不主动调用脚本，脚本自己「等广播」。
@@ -1002,12 +1002,12 @@ export class Runtime {
       data.entities[n] = { x: e.x, y: e.y, vx: e.vx, vy: e.vy, visible: e.visible, size: e.size };
     }
     this.state.saves[slot] = data;
-    try { localStorage.setItem('dualforge.save.' + slot, JSON.stringify(data)); } catch { /* ignore */ }
+    try { localStorage.setItem('tanloom.save.' + slot, JSON.stringify(data)); } catch { /* ignore */ }
     this.log(`💾 存档到「${slot}」`, 'ok');
   }
   loadSlot(slot) {
     let data = this.state.saves[slot];
-    if (!data) { try { data = JSON.parse(localStorage.getItem('dualforge.save.' + slot)); } catch { /* ignore */ } }
+    if (!data) { try { data = JSON.parse(localStorage.getItem('tanloom.save.' + slot)); } catch { /* ignore */ } }
     if (!data) { this.log(`存档「${slot}」不存在`, 'warn'); return; }
     this.state.vars = Object.assign(this.state.vars, data.vars || {});
     this.state.lists = Object.assign(this.state.lists, data.lists || {});
@@ -1071,7 +1071,7 @@ export class Runtime {
     try {
       const body = isExpr ? `return (${code});` : code;
       // eslint-disable-next-line no-new-func
-      const fn = new Function('ctx', 'self', 'vars', 'lists', 'df', 'frame', 'delta', body);
+      const fn = new Function('ctx', 'self', 'vars', 'lists', 'tl', 'frame', 'delta', body);
       return fn(ctx, ctx.self, this.state.vars, this.state.lists, this.apiFor(ctx), this.frame, this.delta);
     } catch (err) {
       this.log(`代码积木错误：${err.message}`, 'error');
@@ -1079,7 +1079,7 @@ export class Runtime {
     }
   }
 
-  /** 暴露给代码积木 / 生成代码的 df 门面 */
+  /** 暴露给代码积木 / 生成代码的 tl 门面 */
   apiFor(ctx) {
     const rt = this;
     return {

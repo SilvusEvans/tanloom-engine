@@ -12,7 +12,7 @@ app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-gpu-compositing');
 app.commandLine.appendSwitch('no-sandbox');
-app.setPath('userData', path.join(require('os').tmpdir(), 'dualforge-probe'));
+app.setPath('userData', path.join(require('os').tmpdir(), 'tanloom-probe'));
 
 registerScheme();
 const ROOT = path.join(__dirname, '..');
@@ -24,7 +24,7 @@ app.whenReady().then(async () => {
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: false }
   });
   win.webContents.on('did-fail-load', (_e, code, desc, url) => console.log('LOAD FAIL', code, desc, url));
-  await win.loadURL('df://app/_probe.html');
+  await win.loadURL('tanloom://app/_probe.html');
   await new Promise((r) => setTimeout(r, 500));
 
   let out = null;

@@ -1,5 +1,5 @@
 /**
- * DualForge — 积木工作区
+ * Tanloom Engine — 积木工作区
  * ================================================================
  * 用 scratch-blocks 的 Blockly 工作区替掉原来手写的 SVG 工作区。
  * 拖拽、吸附、插入标记、缩放、右键菜单、撤销、变量/消息的自动建模型
@@ -135,7 +135,7 @@ export class ScratchWorkspace {
       this.ws.clearUndo();
       // 把脚本 id 挂回顶层积木，写回 IR 时才能对上
       const tops = this.ws.getTopBlocks(true);
-      tops.forEach((b, i) => { if (scripts && scripts[i]) b.__dfScriptId = scripts[i].id; });
+      tops.forEach((b, i) => { if (scripts && scripts[i]) b.__tlScriptId = scripts[i].id; });
     } catch (err) {
       console.error('[积木] 载入失败', err);
     } finally {
@@ -381,8 +381,8 @@ export class ScratchWorkspace {
     const scripts = [];
     const scriptPos = {};
     for (const b of this.ws.getTopBlocks(true)) {
-      let id = b.__dfScriptId;
-      if (!id) { id = uid('script'); b.__dfScriptId = id; }
+      let id = b.__tlScriptId;
+      if (!id) { id = uid('script'); b.__tlScriptId = id; }
       let el;
       try { el = Blockly.Xml.blockToDom(b); } catch { continue; }
       const pos = b.getRelativeToSurfaceXY();

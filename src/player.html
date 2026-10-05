@@ -3,10 +3,10 @@
 
 <head>
   <meta charset="UTF-8" />
-  <!-- 和编辑器同一套资源策略：积木渲染器 / media 走 df://bundle，
+  <!-- 和编辑器同一套资源策略：积木渲染器 / media 走 tanloom://bundle，
        unsafe-eval 是「代码积木」本身的能力（独立窗口里同样可能用到） -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' df://bundle; style-src 'self' 'unsafe-inline' df://bundle; script-src 'self' 'unsafe-eval' df://bundle; img-src 'self' data: blob: df://bundle; media-src 'self' df://bundle; font-src 'self' df://bundle; connect-src 'self' df://bundle;" />
-  <title>DualForge 运行</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' tanloom://bundle; style-src 'self' 'unsafe-inline' tanloom://bundle; script-src 'self' 'unsafe-eval' tanloom://bundle; img-src 'self' data: blob: tanloom://bundle; media-src 'self' tanloom://bundle; font-src 'self' tanloom://bundle; connect-src 'self' tanloom://bundle;" />
+  <title>Tanloom Engine 运行</title>
   <link rel="stylesheet" href="styles/player.css" />
 </head>
 
@@ -17,7 +17,7 @@
   <canvas id="player-canvas"></canvas>
 
   <div class="player-bar">
-    <span class="player-name" id="player-name">DualForge</span>
+    <span class="player-name" id="player-name">Tanloom Engine</span>
     <span class="player-stat" id="player-fps">— fps</span>
     <span class="player-stat" id="player-frame">帧 0</span>
     <span class="player-spacer"></span>

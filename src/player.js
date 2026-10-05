@@ -1,5 +1,5 @@
 /**
- * DualForge — 独立运行窗口
+ * Tanloom Engine — 独立运行窗口
  * ================================================================
  * 只做一件事：把项目跑起来画在一个窗口里。
  *
@@ -42,7 +42,7 @@ function ensureRuntime(nextProject) {
   rt = new Runtime(project, {
     onLog: (entry) => { if (entry && entry.level === 'error') showHint('⚠ ' + entry.msg, 6000); },
   });
-  window.__df = { rt, store, project };
+  window.__tl = { rt, store, project };
 
   if (!stage) {
     stage = new StageView(canvas, store, () => rt, { showChrome: false, showMonitors: false });
@@ -60,7 +60,7 @@ function ensureRuntime(nextProject) {
   updatePauseButton();
   if (wasRunning) rt.start();
 
-  const name = (project && project.name) || 'DualForge';
+  const name = (project && project.name) || 'Tanloom Engine';
   $('player-name').textContent = name;
   document.title = name + ' · 运行';
 }
@@ -115,9 +115,9 @@ $('btn-player-pause').addEventListener('click', () => {
   blurFocus();
 });
 $('btn-player-fullscreen').addEventListener('click', async () => {
-  if (window.dualforge && window.dualforge.setFullScreen) {
-    const now = await window.dualforge.isFullScreen();
-    const on = await window.dualforge.setFullScreen(!now);
+  if (window.tanloom && window.tanloom.setFullScreen) {
+    const now = await window.tanloom.isFullScreen();
+    const on = await window.tanloom.setFullScreen(!now);
     syncFullscreenButton(on);
   } else if (document.fullscreenElement) {
     document.exitFullscreen().catch(() => {});
@@ -127,7 +127,7 @@ $('btn-player-fullscreen').addEventListener('click', async () => {
   blurFocus();
 });
 $('btn-player-close').addEventListener('click', () => {
-  if (window.dualforge && window.dualforge.closePlayer) window.dualforge.closePlayer();
+  if (window.tanloom && window.tanloom.closePlayer) window.tanloom.closePlayer();
   else window.close();
 });
 function syncFullscreenButton(on) {
@@ -144,25 +144,25 @@ function boot() {
   // Esc 退出全屏（窗口全屏不像 HTML5 全屏那样自带 Esc 处理）
   attachKeyboardInput(rtProxy(), {
     onEscape: async () => {
-      if (window.dualforge && window.dualforge.isFullScreen) {
-        if (await window.dualforge.isFullScreen()) {
-          const on = await window.dualforge.setFullScreen(false);
+      if (window.tanloom && window.tanloom.isFullScreen) {
+        if (await window.tanloom.isFullScreen()) {
+          const on = await window.tanloom.setFullScreen(false);
           syncFullscreenButton(on);
         }
       }
     },
   });
 
-  if (window.dualforge && window.dualforge.isFullScreen) {
-    window.dualforge.isFullScreen().then(syncFullscreenButton).catch(() => {});
+  if (window.tanloom && window.tanloom.isFullScreen) {
+    window.tanloom.isFullScreen().then(syncFullscreenButton).catch(() => {});
     window.addEventListener('resize', () => {
-      window.dualforge.isFullScreen().then(syncFullscreenButton).catch(() => {});
+      window.tanloom.isFullScreen().then(syncFullscreenButton).catch(() => {});
     });
   }
 
   // 编辑器改完项目 → 热重载（保持运行）
-  if (window.dualforge && window.dualforge.onPlayerProject) {
-    window.dualforge.onPlayerProject((text) => {
+  if (window.tanloom && window.tanloom.onPlayerProject) {
+    window.tanloom.onPlayerProject((text) => {
       try {
         ensureRuntime(JSON.parse(text));
         showHint('已热重载项目');
@@ -173,8 +173,8 @@ function boot() {
   }
 
   // 取初始项目
-  if (window.dualforge && window.dualforge.playerGetProject) {
-    window.dualforge.playerGetProject().then((text) => {
+  if (window.tanloom && window.tanloom.playerGetProject) {
+    window.tanloom.playerGetProject().then((text) => {
       if (text) {
         try { ensureRuntime(JSON.parse(text)); } catch (err) {
           showHint('⚠ 项目加载失败：' + (err && err.message), 8000);

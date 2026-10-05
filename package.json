@@ -1,8 +1,8 @@
 {
-  "name": "dualforge",
-  "productName": "DualForge",
+  "name": "tanloom-engine",
+  "productName": "Tanloom Engine",
   "version": "0.1.0",
-  "description": "DualForge —— 画得出，也写得出。图形化积木与代码编程共享同一份 IR 的双模 2D 游戏引擎。",
+  "description": "Tanloom Engine —— 画得出，也写得出。图形化积木与代码编程共享同一份 IR 的双模 2D 游戏引擎。",
   "main": "main.cjs",
   "scripts": {
     "start": "node tools/electron.cjs .",
@@ -17,7 +17,7 @@
     "gallery": "node tools/electron.cjs tools/gallery.cjs",
     "probe": "node tools/electron.cjs tools/probe-scratch.cjs"
   },
-  "author": "DualForge",
+  "author": "Tanloom Engine",
   "license": "MIT",
   "devDependencies": {
     "electron": "44.5.1"

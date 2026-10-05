@@ -13,7 +13,7 @@ app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-gpu-compositing');
 app.commandLine.appendSwitch('no-sandbox');
-app.setPath('userData', path.join(require('os').tmpdir(), 'dualforge-gallery'));
+app.setPath('userData', path.join(require('os').tmpdir(), 'tanloom-gallery'));
 
 registerScheme();
 const ROOT = path.join(__dirname, '..');
@@ -28,7 +28,7 @@ app.whenReady().then(async () => {
   const logs = [];
   win.webContents.on('console-message', (e) => { const m = (e && e.message) || ''; if (m) logs.push(m); });
 
-  await win.loadURL('df://app/_gallery.html');
+  await win.loadURL('tanloom://app/_gallery.html');
   await new Promise((r) => setTimeout(r, 1200));
 
   let rep = null;

@@ -1,6 +1,6 @@
 node_modules/
 tools/shots/
 tools/smoke.log
-*.dfp
+*.tle
 tools/bubble.log
 tools/ui.log

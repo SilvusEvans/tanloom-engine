@@ -1,5 +1,5 @@
 /**
- * DualForge 核心自测（纯 Node，不需要 Electron）
+ * Tanloom Engine 核心自测（纯 Node，不需要 Electron）
  *   node tools/test-core.mjs
  *
  * 验证三件事：
@@ -202,8 +202,8 @@ export async function onUpdate(ctx: FrameCtx) {
   const self = ctx.self;
   self.x += 5 * 5;
   vars.分数 += 1;
-  if (df.keyDown("Space")) { self.vy = -400; }
-  df.broadcast("玩家受伤", 10);
+  if (tl.keyDown("Space")) { self.vy = -400; }
+  tl.broadcast("玩家受伤", 10);
 }
 `;
   const res = parseFile(src, { project });
@@ -214,7 +214,7 @@ export async function onUpdate(ctx: FrameCtx) {
   ok(b[1] && b[1].type === 'ChangeVar', 'vars.分数 += 1 应解析为 ChangeVar');
   ok(b[2] && b[2].type === 'If', 'if 应解析为 If');
   ok(b[2].then.blocks[0].type === 'SetProp', 'if 体内 self.vy = ... 应解析为 SetProp');
-  ok(b[3] && b[3].type === 'Broadcast', 'df.broadcast 应解析为 Broadcast');
+  ok(b[3] && b[3].type === 'Broadcast', 'tl.broadcast 应解析为 Broadcast');
 
   // 再生成一遍，语义应保持
   const merged = JSON.parse(JSON.stringify(project));
@@ -234,7 +234,7 @@ export async function onUpdate(ctx: FrameCtx) {
 section('6. 宏定义的代码往返');
 {
   const m = project.macros.macro_hurt;
-  const src = `// @df:macro ${m.id}
+  const src = `// @tl:macro ${m.id}
 // @macro 受伤(伤害)
 // @kind statement
 // @display 受伤 (伤害)
@@ -245,7 +245,7 @@ section('6. 宏定义的代码往返');
 // @codegen function
 export async function 受伤(self: Entity, 伤害: number) {
   vars.生命 += -(伤害);
-  df.shake(8);
+  tl.shake(8);
 }
 `;
   const res = parseFile(src, { project });
@@ -267,10 +267,10 @@ section('7. 表达式还原');
   const src = `// @on render
 export async function onRender(ctx: FrameCtx) {
   const self = ctx.self;
-  vars.得分 = (vars.分数 * 2) + (df.random(1, 6) % 3);
-  df.hud(df.join("分数: ", vars.分数));
-  self.size = df.math("sqrt", vars.分数);
-  if ((df.touching(ctx, self, df.entity("敌人")) && df.keyDown("Space"))) { df.playSound("coin"); }
+  vars.得分 = (vars.分数 * 2) + (tl.random(1, 6) % 3);
+  tl.hud(tl.join("分数: ", vars.分数));
+  self.size = tl.math("sqrt", vars.分数);
+  if ((tl.touching(ctx, self, tl.entity("敌人")) && tl.keyDown("Space"))) { tl.playSound("coin"); }
 }
 `;
   const res = parseFile(src, { project });
@@ -333,8 +333,8 @@ section('9. 订阅开关积木：将 XX 广播订阅状态设为 订阅 / 取消
       scripts: [{ id: 's_sub', hat: { type: 'OnStart' }, body: seq([node]) }]
     });
     const out = generateFiles(merged).find((f) => f.name === '订阅测试.ts');
-    ok(out.text.includes('df.setSubscribed("玩家受伤", false);'),
-      '生成的代码是人能读的：' + (out.text.match(/df\.setSubscribed\([^)]*\)/) || ['没找到'])[0]);
+    ok(out.text.includes('tl.setSubscribed("玩家受伤", false);'),
+      '生成的代码是人能读的：' + (out.text.match(/tl\.setSubscribed\([^)]*\)/) || ['没找到'])[0]);
 
     const back = parseFile(out.text, { project: merged });
     const got = back.scripts[0] && back.scripts[0].body.blocks[0];
@@ -342,13 +342,13 @@ section('9. 订阅开关积木：将 XX 广播订阅状态设为 订阅 / 取消
       '解析回来还是同一块积木：' + JSON.stringify(got));
 
     // 参数写成 true 也要能回来
-    const back2 = parseFile('// @on start\nexport async function onStart(ctx: FrameCtx) {\n  df.setSubscribed("update", true);\n}\n', { project: merged });
+    const back2 = parseFile('// @on start\nexport async function onStart(ctx: FrameCtx) {\n  tl.setSubscribed("update", true);\n}\n', { project: merged });
     const got2 = back2.scripts[0] && back2.scripts[0].body.blocks[0];
     ok(got2 && got2.type === 'SetSubscribed' && got2.state === 'subscribe' && got2.channel === 'update',
       'true 解析成「订阅」：' + JSON.stringify(got2));
 
     // 参数不是 true/false 字面量 → 降级成代码积木，不丢信息
-    const back3 = parseFile('// @on start\nexport async function onStart(ctx: FrameCtx) {\n  df.setSubscribed(动态频道, 开关);\n}\n', { project: merged });
+    const back3 = parseFile('// @on start\nexport async function onStart(ctx: FrameCtx) {\n  tl.setSubscribed(动态频道, 开关);\n}\n', { project: merged });
     const got3 = back3.scripts[0] && back3.scripts[0].body.blocks[0];
     ok(got3 && got3.type === 'CodeBlockStatement' && /setSubscribed/.test(got3.code),
       '映射不回来时降级为代码积木（原样保留）：' + JSON.stringify(got3));
