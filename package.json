@@ -1,0 +1,29 @@
+{
+  "name": "dualforge",
+  "productName": "DualForge",
+  "version": "0.1.0",
+  "description": "DualForge —— 画得出，也写得出。图形化积木与代码编程共享同一份 IR 的双模 2D 游戏引擎。",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "node tools/electron.cjs .",
+    "dev": "node tools/electron.cjs . --dev",
+    "test": "node tools/test-core.mjs",
+    "audit": "node tools/audit-correspondence.mjs",
+    "smoke": "node tools/electron.cjs tools/smoke.cjs",
+    "ui": "node tools/electron.cjs tools/probe-ui.cjs",
+    "bubble": "node tools/electron.cjs tools/probe-bubble.cjs",
+    "player": "node tools/electron.cjs tools/probe-player.cjs",
+    "theme": "node tools/electron.cjs tools/probe-theme.cjs",
+    "gallery": "node tools/electron.cjs tools/gallery.cjs",
+    "probe": "node tools/electron.cjs tools/probe-scratch.cjs"
+  },
+  "author": "DualForge",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "44.5.1"
+  },
+  "type": "module",
+  "dependencies": {
+    "scratch-blocks": "2.1.27"
+  }
+}

@@ -1,0 +1,22 @@
+/* ==================================================================
+   DualForge — 积木视图补充样式
+   ==================================================================
+   积木本体（形状 / 配色 / 字体 / 交互）全部来自 scratch-blocks，
+   它在注入时会自己把样式塞进页面，所以这里只留少量本地修正。 */
+
+/* Blockly 的容器不参与页面文字选中 */
+.blockly-host { user-select: none; -webkit-user-select: none; }
+
+/* 工具箱里的中文标签用页面字体，别走 Blockly 自带的 sans */
+.blocklyTreeLabel,
+.blocklyFlyoutLabelText,
+.blocklyText { font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif; }
+
+/* 滚动条外观跟整体风格对齐 */
+.blocklyToolboxDiv::-webkit-scrollbar,
+.blocklyFlyoutScrollbar::-webkit-scrollbar { width: 8px; }
+.blocklyToolboxDiv::-webkit-scrollbar-thumb,
+.blocklyFlyoutScrollbar::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .18); border-radius: 4px; }
+
+/* 舞台画布 */
+#stage-canvas, #stage-canvas-big { image-rendering: auto; }

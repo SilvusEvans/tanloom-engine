@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>scratch-blocks 定义探针</title>
+  <style>html,body{margin:0;background:#f9f9f9} #w{width:900px;height:600px}</style>
+</head>
+<body>
+  <div id="w"></div>
+  <script>
+    window.__err = null;
+    window.addEventListener('error', (e) => { window.__err = (e.error && e.error.stack) || e.message; });
+    window.addEventListener('unhandledrejection', (e) => { window.__err = String((e.reason && e.reason.stack) || e.reason); });
+  </script>
+  <script type="module">
+    import * as Blockly from './vendor/scratch-blocks.js';
+
+    const COLOURS = {
+      event: ['#FFBF00','#E6AC00','#CC9900'], control: ['#FFAB19','#EC9C13','#CF8B17'],
+      motion: ['#4C97FF','#4280D7','#3373CC'], looks: ['#9966FF','#855CD6','#774DCB'],
+      sounds: ['#CF63CF','#C94FC9','#BD42BD'], sensing: ['#5CB1D6','#47A8BD','#2E8EB8'],
+      operators: ['#59C059','#46B946','#389438'], data: ['#FF8C1A','#FF8000','#DB6E00'],
+      data_lists: ['#FF661A','#FF5500','#E64D00'], more: ['#FF6680','#FF4D6A','#FF3355'],
+      textField: ['#FFFFFF','#FFFFFF','#FFFFFF'],
+    };
+    const blockStyles = {};
+    for (const [id,[p,s,t]] of Object.entries(COLOURS)) blockStyles[id] = { colourPrimary:p, colourSecondary:s, colourTertiary:t };
+
+    window.__probe = (async () => {
+      Blockly.ScratchMsgs.setLocale('zh-cn');
+      const ws = Blockly.inject(document.getElementById('w'), {
+        theme: Blockly.Theme.defineTheme('df', { name:'df', blockStyles, componentStyles:{} }),
+        scratchTheme: Blockly.ScratchBlocksTheme.CLASSIC,
+        media: 'df://bundle/node_modules/scratch-blocks/media/',
+        zoom: { controls:false, wheel:false, startScale:1 }, trashcan:false, sounds:false,
+      });
+
+      const TYPES = [
+        'event_whenflagclicked','event_whenbroadcastreceived','event_whenkeypressed','control_start_as_clone',
+        'control_wait','control_repeat','control_forever','control_repeat_until','control_if','control_if_else',
+        'control_stop','control_delete_this_clone',
+        'motion_movesteps','motion_gotoxy','operator_add','operator_subtract','operator_multiply','operator_divide',
+        'operator_mod','operator_random','operator_gt','operator_lt','operator_equals','operator_and','operator_or',
+        'operator_not','operator_join','operator_letter_of','operator_length','operator_contains','operator_mathop',
+        'looks_sayforsecs','sound_play','sound_stopallsounds','sound_setvolumeto','sound_sounds_menu',
+        'sensing_resettimer','sensing_keypressed','sensing_keyoptions','sensing_mousedown','sensing_mousex','sensing_mousey','sensing_timer',
+        'data_setvariableto','data_changevariableby','data_showvariable','data_hidevariable','data_variable',
+        'data_addtolist','data_deleteoflist','data_insertatlist','data_replaceitemoflist','data_deletealloflist',
+        'data_showlist','data_hidelist','data_itemoflist','data_lengthoflist','data_itemnumoflist',
+        'data_listcontainsitem','data_listcontents',
+        'math_number','text','logic_boolean',
+      ];
+
+      const out = { shapes: {}, blocks: {}, errors: [] };
+      for (const t of TYPES) {
+        if (!Blockly.Blocks[t]) { out.errors.push('未定义: ' + t); continue; }
+        try {
+          const b = ws.newBlock(t);
+          b.initSvg();
+          const inputs = [];
+          for (const inp of b.inputList) {
+            for (const f of inp.fieldRow || []) {
+              inputs.push({ kind:'field', field: f.name, type: f.constructor.name, value: f.getValue && f.getValue() });
+            }
+            if (inp.name !== undefined && inp.name !== null && inp.name !== '') {
+              inputs.push({ kind:'input', name: inp.name, type: inp.type });
+            }
+          }
+          out.blocks[t] = {
+            inputs,
+            output: b.outputConnection ? b.outputConnection.getCheck() : null,
+            outputShape: b.getOutputShape ? b.getOutputShape() : null,
+            prev: !!b.previousConnection, next: !!b.nextConnection,
+            style: b.getStyle && b.getStyle ? b.getStyle() : null,
+          };
+          b.dispose();
+        } catch (e) { out.errors.push(t + ': ' + (e && e.message)); }
+      }
+      return out;
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' df://bundle; style-src 'self' 'unsafe-inline' df://bundle; script-src 'self' 'unsafe-eval' 'unsafe-inline' df://bundle; img-src 'self' data: blob: df://bundle; media-src 'self' df://bundle; font-src 'self' df://bundle; connect-src 'self' df://bundle;" />
+  <title>DualForge · 积木总览</title>
+  <link rel="stylesheet" href="styles/base.css" />
+  <style>
+    html, body { margin: 0; background: #f9f9f9; color: #2a3346; height: auto; overflow: visible; }
+    #board { padding: 0; }
+    .cap { font: 700 11px var(--ui); color: #6b7688; padding: 6px 0 2px; }
+    #meta { position: fixed; left: 8px; bottom: 8px; background: rgba(255,255,255,.92); border: 1px solid #d3d8e2;
+            border-radius: 6px; padding: 4px 10px; font: 11px var(--ui); color: #575e75; }
+  </style>
+</head>
+<body>
+  <div id="board"></div>
+  <div id="meta">加载中…</div>
+  <script>
+    window.__err = null;
+    window.addEventListener('error', (e) => { window.__err = (e.error && e.error.stack) || e.message; });
+    window.addEventListener('unhandledrejection', (e) => { window.__err = String((e.reason && e.reason.stack) || e.reason); });
+  </script>
+  <script type="module" src="gallery.js"></script>
+</body>
+</html>

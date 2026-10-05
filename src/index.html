@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <!-- 积木渲染器（scratch-blocks）通过 df://bundle/ 从 node_modules 加载，
+       它和编辑器本体（df://app/）不是同一个来源，所以必须显式放行。
+       脚本仍然只允许本地来源；unsafe-eval 是「代码积木 / 代码视图」本身的能力。 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' df://bundle; style-src 'self' 'unsafe-inline' df://bundle; script-src 'self' 'unsafe-eval' df://bundle; img-src 'self' data: blob: df://bundle; media-src 'self' df://bundle; font-src 'self' df://bundle; connect-src 'self' df://bundle;" />
+  <title>DualForge · 双模游戏引擎</title>
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/layout.css" />
+  <link rel="stylesheet" href="styles/blocks.css" />
+  <link rel="stylesheet" href="styles/fullscreen.css" />
+</head>
+
+<body>
+  <div class="app">
+    <!-- ================= 顶栏 ================= -->
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">◈</span>
+        <span class="brand-name">DualForge</span>
+        <span class="brand-sub">双模引擎</span>
+      </div>
+
+      <nav class="mode-tabs" id="mode-tabs">
+        <button data-view="blocks" class="active">积木</button>
+        <button data-view="code">代码</button>
+        <button data-view="scene">场景</button>
+        <button data-view="assets">资源</button>
+      </nav>
+
+      <div class="entity-picker">
+        <label>编辑对象</label>
+        <select id="entity-select"></select>
+        <button id="btn-add-entity" title="新建实体">＋</button>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div class="run-group">
+        <button id="btn-run" class="run" title="运行 (F5)">▶ 运行</button>
+        <button id="btn-pause" title="暂停">⏸</button>
+        <button id="btn-step" title="单步推进一帧">⏭</button>
+        <button id="btn-stop" title="停止">⏹</button>
+        <button id="btn-player" class="player" title="在独立窗口里运行 (F6)">⧉ 新窗口</button>
+        <button id="btn-fullscreen" class="fullscreen" title="全屏游玩 (F11)">⛶ 全屏</button>
+        <span class="stat" id="stat-fps">— fps</span>
+        <span class="stat" id="stat-frame">帧 0</span>
+      </div>
+
+      <div class="file-group">
+        <button id="btn-undo" title="撤销 (Ctrl+Z)">↺</button>
+        <button id="btn-redo" title="重做 (Ctrl+Y)">↻</button>
+        <button id="btn-open">打开</button>
+        <button id="btn-save">保存</button>
+        <button id="btn-export">导出代码</button>
+        <button id="btn-appearance" title="外观：主题色 / 字体 / 字号 (Ctrl+,)">◐ 外观</button>
+        <button id="btn-help" title="帮助">?</button>
+      </div>
+    </header>
+
+    <!-- ================= 主视图区 ================= -->
+    <main class="view-host">
+      <!-- 积木视图 -->
+      <section class="view" id="view-blocks">
+        <div class="col ws-col">
+          <div class="col-head">
+            <span>积木</span>
+            <div class="ws-actions">
+              <button id="btn-new-category" title="新建分类">＋ 分类</button>
+              <button id="btn-ws-fit" title="缩放以适应">⤢ 适应</button>
+            </div>
+          </div>
+          <div class="blockly-host" id="blockly-host"></div>
+        </div>
+
+        <div class="col stage-col">
+          <div class="col-head"><span>舞台 · 实时预览</span>
+            <span class="tag" id="stage-scene">场景 1</span>
+          </div>
+          <div class="stage-wrap">
+            <canvas id="stage-canvas" width="480" height="360"></canvas>
+          </div>
+          <div class="col-head sub"><span>层级</span></div>
+          <div class="hierarchy" id="hierarchy"></div>
+          <div class="col-head sub"><span>属性检查器</span></div>
+          <div class="inspector" id="inspector"></div>
+        </div>
+      </section>
+
+      <!-- 代码视图 -->
+      <section class="view hidden" id="view-code">
+        <div class="code-sidebar">
+          <div class="col-head"><span>虚拟文件</span></div>
+          <div class="file-list" id="code-files"></div>
+          <div class="col-head"><span>注解速查</span></div>
+          <div class="cheatsheet">
+            <code>// @on update</code>
+            <code>// @on start</code>
+            <code>// @on key(Space)</code>
+            <code>// @on event(玩家受伤)</code>
+            <code>// @on collision(玩家, 敌人)</code>
+            <code>// @on clone</code>
+            <code>// @macro 平方(x) => (x) * (x)</code>
+          </div>
+          <div class="code-actions">
+            <button id="btn-code-sync" class="primary">保存到积木 (Ctrl+S)</button>
+            <button id="btn-code-revert">放弃改动</button>
+          </div>
+        </div>
+        <div class="code-main">
+          <div class="code-banner hidden" id="code-banner"></div>
+          <div class="code-editor">
+            <pre class="code-highlight" id="code-highlight" aria-hidden="true"></pre>
+            <textarea id="code-input" spellcheck="false" autocomplete="off"></textarea>
+          </div>
+          <div class="code-status" id="code-status">读取中…</div>
+        </div>
+      </section>
+
+      <!-- 场景视图 -->
+      <section class="view hidden" id="view-scene">
+        <div class="scene-left">
+          <div class="col-head"><span>实体层级</span>
+            <button id="btn-add-entity2">＋ 新建实体</button>
+          </div>
+          <div class="hierarchy big" id="scene-hierarchy"></div>
+        </div>
+        <div class="scene-mid">
+          <div class="stage-wrap big">
+            <canvas id="stage-canvas-big" width="640" height="480"></canvas>
+          </div>
+        </div>
+        <div class="scene-right">
+          <div class="col-head"><span>属性检查器</span></div>
+          <div class="inspector" id="scene-inspector"></div>
+        </div>
+      </section>
+
+      <!-- 资源视图 -->
+      <section class="view hidden" id="view-assets">
+        <div class="assets-grid">
+          <div class="panel">
+            <div class="col-head"><span>变量</span><button data-add="var">＋</button></div>
+            <div class="list-body" id="assets-vars"></div>
+          </div>
+          <div class="panel">
+            <div class="col-head"><span>列表</span><button data-add="list">＋</button></div>
+            <div class="list-body" id="assets-lists"></div>
+          </div>
+          <div class="panel">
+            <div class="col-head"><span>广播频道</span><button data-add="channel">＋</button></div>
+            <div class="list-body" id="assets-channels"></div>
+          </div>
+          <div class="panel">
+            <div class="col-head"><span>积木分类</span><button data-add="category">＋</button></div>
+            <div class="list-body" id="assets-categories"></div>
+          </div>
+          <div class="panel wide">
+            <div class="col-head"><span>合成积木</span></div>
+            <div class="list-body" id="assets-macros"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ================= 底部调试坞 ================= -->
+    <footer class="dock">
+      <div class="dock-tabs" id="dock-tabs">
+        <button data-panel="broadcast" class="active">广播时间轴</button>
+        <button data-panel="subs">订阅列表</button>
+        <button data-panel="vars">变量监视</button>
+        <button data-panel="perf">性能分析</button>
+        <button data-panel="console">控制台</button>
+        <button class="dock-toggle" id="dock-toggle">▾</button>
+      </div>
+      <div class="dock-body" id="dock-body"></div>
+    </footer>
+  </div>
+
+  <div class="popup-layer" id="popup-layer"></div>
+  <div class="ctx-layer" id="ctx-layer"></div>
+
+  <!-- ================= 全屏游玩层 ================= -->
+  <!-- 盖住整个编辑器，只留舞台。键盘从这一层起就完全归游戏了。 -->
+  <div class="fullscreen-layer hidden" id="fullscreen-layer">
+    <canvas id="fullscreen-canvas"></canvas>
+    <div class="fs-bar">
+      <span class="fs-title">全屏游玩</span>
+      <span class="fs-stat" id="fs-fps">— fps</span>
+      <span class="fs-stat" id="fs-frame">帧 0</span>
+      <span class="fs-sep"></span>
+      <button id="btn-fs-native" title="连窗口边框一起去掉">⛶ 窗口全屏</button>
+      <button id="btn-fs-exit" title="退出全屏 (Esc)">✕ 退出 (Esc)</button>
+    </div>
+    <div class="fs-hint" id="fs-hint"></div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+
+</html>

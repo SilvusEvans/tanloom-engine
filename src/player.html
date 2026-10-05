@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <!-- 和编辑器同一套资源策略：积木渲染器 / media 走 df://bundle，
+       unsafe-eval 是「代码积木」本身的能力（独立窗口里同样可能用到） -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' df://bundle; style-src 'self' 'unsafe-inline' df://bundle; script-src 'self' 'unsafe-eval' df://bundle; img-src 'self' data: blob: df://bundle; media-src 'self' df://bundle; font-src 'self' df://bundle; connect-src 'self' df://bundle;" />
+  <title>DualForge 运行</title>
+  <link rel="stylesheet" href="styles/player.css" />
+</head>
+
+<body>
+  <!-- 独立运行窗口：只有一个舞台 + 一条会自动淡出的工具条。
+       窗口里跑的是**另一份** Runtime（跨进程没法共享运行中的状态），
+       项目数据由编辑器通过主进程推过来，改完即热重载。 -->
+  <canvas id="player-canvas"></canvas>
+
+  <div class="player-bar">
+    <span class="player-name" id="player-name">DualForge</span>
+    <span class="player-stat" id="player-fps">— fps</span>
+    <span class="player-stat" id="player-frame">帧 0</span>
+    <span class="player-spacer"></span>
+    <button id="btn-player-restart" title="从头重新运行">⟲ 重来</button>
+    <button id="btn-player-pause" title="暂停 / 继续">⏸ 暂停</button>
+    <button id="btn-player-fullscreen" title="窗口全屏 (F11)">⛶ 全屏</button>
+    <button id="btn-player-close" title="关闭这个窗口 (Esc)">✕ 关闭</button>
+  </div>
+
+  <div class="player-hint" id="player-hint"></div>
+
+  <script type="module" src="player.js"></script>
+</body>
+
+</html>

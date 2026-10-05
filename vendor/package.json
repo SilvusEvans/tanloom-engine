@@ -1,0 +1,10 @@
+{
+  "name": "electron",
+  "version": "44.5.1",
+  "description": "Build cross platform desktop apps with JavaScript, HTML, and CSS (offline local dist)",
+  "main": "index.js",
+  "bin": {
+    "electron": "cli.js"
+  },
+  "license": "MIT"
+}

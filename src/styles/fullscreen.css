@@ -1,0 +1,109 @@
+/* ==================================================================
+   全屏游玩层
+   盖住整个编辑器，只留舞台。舞台用 Canvas 2D 按比例缩放居中
+   （StageView 的 k = min(cw/W, ch/H)），上下或左右自然留黑边。
+   ================================================================== */
+
+.fullscreen-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 8000;
+  background: #05070b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fullscreen-layer.hidden { display: none; }
+
+.fullscreen-layer canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* 顶部工具条：平时几乎透明，鼠标移过去才亮起来 */
+.fs-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: linear-gradient(to bottom, rgba(5, 7, 11, .88), rgba(5, 7, 11, 0));
+  color: #cfd6e4;
+  font: 500 12px/1 var(--ui, system-ui, sans-serif);
+  opacity: .28;
+  transition: opacity .18s ease;
+}
+.fullscreen-layer:hover .fs-bar,
+.fs-bar:focus-within { opacity: 1; }
+
+.fs-title { font-weight: 700; letter-spacing: .04em; color: #e8edf6; }
+.fs-stat { font-family: var(--mono, monospace); color: #8e99ad; }
+.fs-sep { flex: 1; }
+
+.fs-bar button {
+  padding: 5px 11px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid #333c4d;
+  background: #1b2029;
+  color: #cfd6e4;
+  cursor: pointer;
+}
+.fs-bar button:hover { background: #242a35; border-color: #46516a; }
+#btn-fs-exit { border-color: #5a3a3a; color: #ffb4b4; }
+#btn-fs-exit:hover { background: #2c1e1e; border-color: #7b4a4a; }
+
+/* 底部提示：进全屏后亮几秒，然后淡出，不挡视野 */
+.fs-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  transform: translateX(-50%);
+  padding: 8px 18px;
+  border-radius: 20px;
+  background: rgba(10, 13, 19, .78);
+  border: 1px solid rgba(255, 255, 255, .1);
+  color: #cfd6e4;
+  font: 500 13px/1.4 var(--ui, system-ui, sans-serif);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity .6s ease;
+}
+.fs-hint.out { opacity: 0; }
+.fs-hint kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0 2px;
+  border-radius: 4px;
+  border: 1px solid #46516a;
+  background: #1b2029;
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+}
+
+/* 顶部工具条上的「新窗口 / 全屏」按钮：稍微显眼一点 */
+.run-group button.player {
+  border-color: #3a4a63;
+  color: #a9e6c8;
+}
+.run-group button.player:hover { background: #1b2a24; border-color: #468260; }
+.run-group button.player.on {
+  background: #123326;
+  border-color: #2fbf7f;
+  color: #b7f4d6;
+}
+
+.run-group button.fullscreen {
+  border-color: #3a4a63;
+  color: #9fc4ff;
+}
+.run-group button.fullscreen:hover { background: #1d2735; border-color: #4d6a99; }
+.run-group button.fullscreen.on {
+  background: #1d3350;
+  border-color: #4C97FF;
+  color: #cfe2ff;
+}
