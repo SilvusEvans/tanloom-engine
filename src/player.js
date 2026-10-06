@@ -9,6 +9,7 @@
  * · 键盘直接接进运行时（和编辑器同一个输入层），所以窗口开着就能玩。
  */
 
+import { t, localizeDom } from './core/i18n.js';
 import { Runtime, attachDefs } from './runtime/vm.js';
 import * as blockdefs from './core/blockdefs.js';
 import { StageView } from './scene/viewport.js';
@@ -52,7 +53,7 @@ function ensureRuntime(nextProject) {
   stage.resize();
 
   try { rt.load(project); } catch (err) {
-    showHint('⚠ 项目加载失败：' + (err && err.message), 8000);
+    showHint(t('⚠ 项目加载失败：') + (err && err.message), 8000);
     console.error(err);
     return;
   }
@@ -62,7 +63,7 @@ function ensureRuntime(nextProject) {
 
   const name = (project && project.name) || 'Tanloom Engine';
   $('player-name').textContent = name;
-  document.title = name + ' · 运行';
+  document.title = name + t(' · 运行');
 }
 
 /* ------------------------------------------------------------------ */
@@ -79,7 +80,7 @@ function draw() {
     frameCount = rt.frame;
     lastFpsTs = now;
     $('player-fps').textContent = `${fps} fps`;
-    $('player-frame').textContent = `帧 ${rt.frame}`;
+    $('player-frame').textContent = t('帧 {_1}', { _1: rt.frame });
   }
   requestAnimationFrame(draw);
 }
@@ -97,7 +98,7 @@ function showHint(text, ms = 4000) {
 
 function updatePauseButton() {
   const b = $('btn-player-pause');
-  if (b) b.textContent = paused ? '▶ 继续' : '⏸ 暂停';
+  if (b) b.textContent = paused ? t('▶ 继续') : t('⏸ 暂停');
 }
 
 /* ------------------------------------------------------------------ */
@@ -105,7 +106,7 @@ function updatePauseButton() {
 /* ------------------------------------------------------------------ */
 $('btn-player-restart').addEventListener('click', () => {
   ensureRuntime(project);
-  showHint('已从头重新运行');
+  showHint(t('已从头重新运行'));
   blurFocus();
 });
 $('btn-player-pause').addEventListener('click', () => {
@@ -132,13 +133,15 @@ $('btn-player-close').addEventListener('click', () => {
 });
 function syncFullscreenButton(on) {
   const b = $('btn-player-fullscreen');
-  if (b) b.textContent = on ? '⤡ 退出全屏' : '⛶ 全屏';
+  if (b) b.textContent = on ? t('⤡ 退出全屏') : t('⛶ 全屏');
 }
 
 /* ------------------------------------------------------------------ */
 /* 启动                                                                */
 /* ------------------------------------------------------------------ */
 function boot() {
+  // HTML 里的静态文案（player.html 上标了 data-i18n 的那些）
+  localizeDom();
   preventButtonFocus(document);
 
   // Esc 退出全屏（窗口全屏不像 HTML5 全屏那样自带 Esc 处理）
@@ -165,9 +168,9 @@ function boot() {
     window.tanloom.onPlayerProject((text) => {
       try {
         ensureRuntime(JSON.parse(text));
-        showHint('已热重载项目');
+        showHint(t('已热重载项目'));
       } catch (err) {
-        showHint('⚠ 热重载失败：' + (err && err.message), 6000);
+        showHint(t('⚠ 热重载失败：') + (err && err.message), 6000);
       }
     });
   }
@@ -177,15 +180,15 @@ function boot() {
     window.tanloom.playerGetProject().then((text) => {
       if (text) {
         try { ensureRuntime(JSON.parse(text)); } catch (err) {
-          showHint('⚠ 项目加载失败：' + (err && err.message), 8000);
+          showHint(t('⚠ 项目加载失败：') + (err && err.message), 8000);
           console.error(err);
         }
       } else {
-        showHint('等待编辑器发送项目…', 600000);
+        showHint(t('等待编辑器发送项目…'), 600000);
       }
       requestAnimationFrame(draw);
     }).catch((err) => {
-      showHint('⚠ 取项目失败：' + (err && err.message), 8000);
+      showHint(t('⚠ 取项目失败：') + (err && err.message), 8000);
       requestAnimationFrame(draw);
     });
   } else {

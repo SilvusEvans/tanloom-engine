@@ -13,6 +13,7 @@
  *   · 认不出的节点降级成「⚠ 未识别」积木，把原始 JSON 存进字段 —— 不丢信息
  */
 
+import { t } from '../../core/i18n.js';
 import { E, seq } from '../../core/ir.js';
 import { entryForNode, BY_BLOCK, KEY_TO_SCRATCH, SCRATCH_TO_KEY, STOP_TO_SCRATCH, STOP_IN, macroBlockType } from './defs.js';
 
@@ -100,7 +101,7 @@ export function nodeToXml(node, project, withPos) {
   if (node.type === 'MacroCall' || node.type === 'MacroCallStatement') {
     const macro = project.macros && project.macros[node.macroId];
     if (!macro) {
-      return `<block type="df_unknown"${pos}><field name="TEXT">${esc('⚠ 缺失的合成积木 ' + node.macroId)}</field></block>`;
+      return `<block type="df_unknown"${pos}><field name="TEXT">${esc(t('⚠ 缺失的合成积木 {_1}', { _1: node.macroId }))}</field></block>`;
     }
     const args = (macro.params || []).map((p, i) => {
       const v = (node.args || [])[i];
@@ -260,7 +261,7 @@ export function xmlToNode(el, project) {
   }
 
   const entry = BY_BLOCK[type];
-  if (!entry) return { type: 'CodeBlockStatement', code: '// 未知积木 ' + type };
+  if (!entry) return { type: 'CodeBlockStatement', code: t('// 未知积木 {_1}', { _1: type }) };
 
   // 注意：这里按 **Blockly 参数名** 收集（不是 IR 字段名），
   // 因为 entry.make 是按 block 定义写的（f.ENTITY / f.SUBSTACK …）。
@@ -284,7 +285,7 @@ export function xmlToNode(el, project) {
   }
 
   const built = entry.make(gathered);
-  return built || { type: 'CodeBlockStatement', code: '// 无法还原 ' + type };
+  return built || { type: 'CodeBlockStatement', code: t('// 无法还原 {_1}', { _1: type }) };
 }
 
 /* ------------------------------------------------------------------ */

@@ -15,6 +15,11 @@ app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('no-sandbox');
 
+// 自己的 userData：冒烟会用真实窗口跑，如果和日常使用共用一份，
+// 上一次留下的界面语言（localStorage）会传染进来，断言里写死的中文文案就会失配 ——
+// 这个坑真踩过（有一轮 smoke 起始语言是 en，于是「空分类引导」那条一直失败）。
+app.setPath('userData', path.join(require('os').tmpdir(), 'tanloom-smoke'));
+
 
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'tools', 'shots');
@@ -371,16 +376,26 @@ app.whenReady().then(async () => {
   })()`);
 
   await probe('新建的分类在选择区里真的有这一行', `(async () => {
-    // refreshToolbox 走的是 rAF，等一帧
-    await new Promise(r => setTimeout(r, 500));
-    const rows = [...document.querySelectorAll('#blockly-host .blocklyToolboxCategory')].map(e => e.textContent.trim());
-    const hint = [...document.querySelectorAll('#blockly-host .blocklyFlyoutLabelText')].map(e => e.textContent);
-    const buttons = [...document.querySelectorAll('#blockly-host .blocklyFlyoutButton')].map(e => e.textContent.trim());
-    const hasRow = rows.some(t => t.includes('冒烟分类'));
-    const hasHint = hint.some(t => t.includes('空的'));
-    const hasBtn = buttons.some(t => t.includes('新建积木'));
-    return { ok: hasRow && hasHint && hasBtn,
-             detail: rows.length + ' 行 · 空分类引导 ' + hasHint + ' · 新建按钮 ' + hasBtn };
+    // 连续工具箱里所有分类共用同一个飞出面板，重建是异步的 —— 轮询而不是固定等一帧，
+    // 否则偶尔会查到「分类行已经有了、引导和按钮还没画出来」的中间态（实测过）。
+    const snap = () => {
+      const rows = [...document.querySelectorAll('#blockly-host .blocklyToolboxCategory')].map(e => e.textContent.trim());
+      const hint = [...document.querySelectorAll('#blockly-host .blocklyFlyoutLabelText')].map(e => e.textContent);
+      const buttons = [...document.querySelectorAll('#blockly-host .blocklyFlyoutButton')].map(e => e.textContent.trim());
+      return {
+        rows, n: rows.length,
+        hasRow: rows.some(t => t.includes('冒烟分类')),
+        hasHint: hint.some(t => t.includes('空的')),
+        hasBtn: buttons.some(t => t.includes('新建积木')),
+      };
+    };
+    let s = snap();
+    for (let i = 0; i < 15 && !(s.hasRow && s.hasHint && s.hasBtn); i++) {
+      await new Promise(r => setTimeout(r, 200));
+      s = snap();
+    }
+    return { ok: s.hasRow && s.hasHint && s.hasBtn,
+             detail: s.n + ' 行 · 空分类引导 ' + s.hasHint + ' · 新建按钮 ' + s.hasBtn };
   })()`);
 
   await probe('从零新建积木 → 落到选择区与画布', `(async () => {
@@ -850,6 +865,52 @@ app.whenReady().then(async () => {
       fs.writeFileSync(path.join(OUT, name + '.png'), img.toPNG());
       console.log('截图: tools/shots/' + name + '.png');
     } catch (e) { fail('截图失败(' + view + ') ' + e.message); }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 界面语言：三种语言真的都上屏了吗（切语言会重载窗口，所以每次都要等加载完）  */
+  /* ------------------------------------------------------------------ */
+  {
+    const readUi = () => win.webContents.executeJavaScript(`(() => {
+      const tl = window.__tl;
+      const btn = document.querySelector('#btn-run');
+      return {
+        lang: tl.i18n.lang,
+        run: (btn && btn.textContent || '').trim(),
+        save: tl.i18n.t('保存'),
+        appearance: tl.i18n.t('外观'),
+        langLabel: tl.i18n.t('界面语言'),
+        stored: (() => { try { return localStorage.getItem('tanloom.lang'); } catch { return null; } })(),
+      };
+    })()`);
+
+    const switchTo = async (code) => {
+      const loaded = new Promise((r) => win.webContents.once('did-finish-load', r));
+      try { await win.webContents.executeJavaScript(`window.__tl.i18n.setLang(${JSON.stringify(code)})`); }
+      catch { /* 重载会把这条 promise 打断，正常 */ }
+      await Promise.race([loaded, sleep(6000)]);
+      await sleep(600);
+      return readUi();
+    };
+
+    const before = await readUi();
+    console.log(`  · 起始语言 ${before.lang}（系统语言决定）· 运行键=${before.run} · 保存=${before.save}`);
+
+    const en = await switchTo('en');
+    // 语言选择是否落盘，用**行为**证明：切语言会重载窗口，重载后仍是 en 就说明存下来了
+    const okEn = en.lang === 'en' && /Run/.test(en.run) && en.save === 'Save';
+    if (!okEn) fail('切到英语后界面没变英文 / ' + JSON.stringify(en));
+    console.log(`  ${okEn ? '✓' : '✖'} 切英语（重载后仍是英语＝选择已落盘）→ 顶栏「运行」=${en.run} · t('保存')=${en.save}`);
+
+    const hant = await switchTo('zh-Hant');
+    const okHant = hant.lang === 'zh-Hant' && hant.save === '儲存' && hant.appearance === '外觀';
+    if (!okHant) fail('切到繁体后没变繁体 / ' + JSON.stringify(hant));
+    console.log(`  ${okHant ? '✓' : '✖'} 切繁體 → t('保存')=${hant.save} · t('外观')=${hant.appearance} · t('界面语言')=${hant.langLabel}`);
+
+    const back = await switchTo(before.lang);
+    const okBack = back.lang === before.lang && back.save === before.save && back.run === before.run;
+    if (!okBack) fail('切回原语言没还原 / ' + JSON.stringify(back));
+    console.log(`  ${okBack ? '✓' : '✖'} 切回 ${back.lang} → 与起始一致（保存=${back.save} · 运行键=${back.run}）`);
   }
 
   console.log('\n---- 控制台输出（最后 40 条）----');

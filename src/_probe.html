@@ -23,11 +23,12 @@
       data_lists: ['#FF661A','#FF5500','#E64D00'], more: ['#FF6680','#FF4D6A','#FF3355'],
       textField: ['#FFFFFF','#FFFFFF','#FFFFFF'],
     };
+    import { scratchLocale } from './core/i18n.js';
     const blockStyles = {};
     for (const [id,[p,s,t]] of Object.entries(COLOURS)) blockStyles[id] = { colourPrimary:p, colourSecondary:s, colourTertiary:t };
 
     window.__probe = (async () => {
-      Blockly.ScratchMsgs.setLocale('zh-cn');
+      Blockly.ScratchMsgs.setLocale(scratchLocale());
       const ws = Blockly.inject(document.getElementById('w'), {
         theme: Blockly.Theme.defineTheme('tanloom', { name: 'tanloom', blockStyles, componentStyles:{} }),
         scratchTheme: Blockly.ScratchBlocksTheme.CLASSIC,

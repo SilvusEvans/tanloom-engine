@@ -15,6 +15,7 @@
  * 否则换主题 / 调字号时会留下一块没跟上的旧样式。
  */
 
+import { t, lang, setLang, LANGS } from '../core/i18n.js';
 import { showModal, hint, toast } from './dialogs.js';
 import { highlight } from '../code/editor.js';
 
@@ -30,16 +31,16 @@ const MONO = '"JetBrains Mono", "Cascadia Mono", Consolas, "Courier New", monosp
 
 /** 界面字体（顶栏、面板、对话框） */
 export const UI_FONTS = [
-  { id: 'sans', name: '非衬线（默认）', stack: SANS },
-  { id: 'serif', name: '衬线', stack: SERIF },
-  { id: 'mono', name: '等宽', stack: MONO },
+  { id: 'sans', name: t('非衬线（默认）'), stack: SANS },
+  { id: 'serif', name: t('衬线'), stack: SERIF },
+  { id: 'mono', name: t('等宽'), stack: MONO },
 ];
 
 /** 代码字体（代码编辑器、文件列表、日志 —— 所有走 --mono 的地方） */
 export const CODE_FONTS = [
-  { id: 'mono', name: '等宽（默认）', stack: MONO },
-  { id: 'serif', name: '衬线', stack: SERIF },
-  { id: 'sans', name: '非衬线', stack: SANS },
+  { id: 'mono', name: t('等宽（默认）'), stack: MONO },
+  { id: 'serif', name: t('衬线'), stack: SERIF },
+  { id: 'sans', name: t('非衬线'), stack: SANS },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -50,10 +51,10 @@ export const CODE_FONTS = [
  * 这里只给一个倍率。所以以后加新样式照基准写就行，不用管档位有几档。
  */
 export const SCALES = [
-  { id: 'sm', name: '小', v: 0.9 },
-  { id: 'md', name: '标准', v: 1 },
-  { id: 'lg', name: '大', v: 1.12 },
-  { id: 'xl', name: '特大', v: 1.26 },
+  { id: 'sm', name: t('小'), v: 0.9 },
+  { id: 'md', name: t('标准'), v: 1 },
+  { id: 'lg', name: t('大'), v: 1.12 },
+  { id: 'xl', name: t('特大'), v: 1.26 },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -105,11 +106,11 @@ const LIGHT = {
 /* ------------------------------------------------------------------ */
 export const THEMES = [
   {
-    id: 'dark', name: '夜幕 · 蓝', dark: true,
+    id: 'dark', name: t('夜幕 · 蓝'), dark: true,
     vars: { ...DARK },
   },
   {
-    id: 'midnight', name: '午夜 · 墨', dark: true,
+    id: 'midnight', name: t('午夜 · 墨'), dark: true,
     vars: {
       ...DARK,
       chrome: '#0a0d12', chrome2: '#10141b', panel: '#151a23', panel2: '#1c2330',
@@ -141,7 +142,7 @@ export const THEMES = [
     },
   },
   {
-    id: 'nord', name: 'Nord · 极地', dark: true,
+    id: 'nord', name: t('Nord · 极地'), dark: true,
     vars: {
       ...DARK,
       chrome: '#262b36', chrome2: '#2e3440', panel: '#3b4252', panel2: '#434c5e',
@@ -159,11 +160,11 @@ export const THEMES = [
     },
   },
   {
-    id: 'light', name: '晨曦 · 白', dark: false,
+    id: 'light', name: t('晨曦 · 白'), dark: false,
     vars: { ...LIGHT },
   },
   {
-    id: 'solarized', name: 'Solarized · 纸', dark: false,
+    id: 'solarized', name: t('Solarized · 纸'), dark: false,
     vars: {
       ...LIGHT,
       chrome: '#eee8d5', chrome2: '#e7e0cb', panel: '#fdf6e3', panel2: '#f3ecd7',
@@ -213,14 +214,14 @@ const readableOn = (hex) => {
 /* 重点色（覆盖主题自带的 accent）                                      */
 /* ------------------------------------------------------------------ */
 export const ACCENTS = [
-  { id: 'blue', name: '蓝', c: '#4c97ff', c2: '#3373cc' },
-  { id: 'violet', name: '紫', c: '#855cd6', c2: '#6a45b3' },
-  { id: 'pink', name: '品红', c: '#e05e9b', c2: '#bd3f7c' },
-  { id: 'red', name: '红', c: '#ef5350', c2: '#c62828' },
-  { id: 'orange', name: '橙', c: '#ff9f43', c2: '#d97f22' },
-  { id: 'green', name: '绿', c: '#3fa96a', c2: '#2f8352' },
-  { id: 'teal', name: '青', c: '#26b5ad', c2: '#1a8f89' },
-  { id: 'slate', name: '石墨', c: '#7b8794', c2: '#5e6873' },
+  { id: 'blue', name: t('蓝'), c: '#4c97ff', c2: '#3373cc' },
+  { id: 'violet', name: t('紫'), c: '#855cd6', c2: '#6a45b3' },
+  { id: 'pink', name: t('品红'), c: '#e05e9b', c2: '#bd3f7c' },
+  { id: 'red', name: t('红'), c: '#ef5350', c2: '#c62828' },
+  { id: 'orange', name: t('橙'), c: '#ff9f43', c2: '#d97f22' },
+  { id: 'green', name: t('绿'), c: '#3fa96a', c2: '#2f8352' },
+  { id: 'teal', name: t('青'), c: '#26b5ad', c2: '#1a8f89' },
+  { id: 'slate', name: t('石墨'), c: '#7b8794', c2: '#5e6873' },
 ].map((a) => ({ ...a, on: readableOn(a.c) }));
 
 /* ------------------------------------------------------------------ */
@@ -433,7 +434,7 @@ export function openAppearanceDialog(app) {
   /* --- 主题 --- */
   const tSec = document.createElement('div');
   tSec.className = 'ap-section';
-  tSec.appendChild(sectionLabel('主题'));
+  tSec.appendChild(sectionLabel(t('主题')));
   const grid = document.createElement('div');
   grid.className = 'ap-themes';
 
@@ -446,7 +447,7 @@ export function openAppearanceDialog(app) {
   sysBtn.appendChild(sysStrip);
   const sysName = document.createElement('span');
   sysName.className = 'ap-name';
-  sysName.textContent = '跟随系统';
+  sysName.textContent = t('跟随系统');
   sysBtn.appendChild(sysName);
   sysBtn.addEventListener('click', () => app.setFollowSystem(true));
   grid.appendChild(sysBtn);
@@ -467,15 +468,29 @@ export function openAppearanceDialog(app) {
   tSec.appendChild(grid);
   body.appendChild(tSec);
 
+  /* --- 界面语言 --- */
+  // 换语言会**重载窗口**（和 Scratch 一样）：积木文案来自三处 —— 本表的自定义积木、
+  // scratch-blocks 的原生积木（它有自己内嵌的语言表）、以及各个面板的 DOM，
+  // 与其到处写热更新补丁，不如一次性全部重建。
+  const lSec = document.createElement('div');
+  lSec.className = 'ap-section';
+  lSec.appendChild(sectionLabel(t('界面语言')));
+  const langSel = selectOf(LANGS.map((l) => ({ id: l.id, name: l.label })), 'ap-sel-lang');
+  langSel.value = lang;
+  langSel.addEventListener('change', () => setLang(langSel.value));
+  lSec.appendChild(fieldRow(t('界面语言'), langSel));
+  lSec.appendChild(hint(t('换语言会重载窗口：积木上的字、原生积木的译文和所有面板要一起重建')));
+  body.appendChild(lSec);
+
   /* --- 重点色 --- */
   const aSec = document.createElement('div');
   aSec.className = 'ap-section';
-  aSec.appendChild(sectionLabel('重点色'));
+  aSec.appendChild(sectionLabel(t('重点色')));
   const dots = document.createElement('div');
   dots.className = 'ap-accents';
   const autoBtn = document.createElement('button');
   autoBtn.className = 'ap-auto';
-  autoBtn.textContent = '跟随主题';
+  autoBtn.textContent = t('跟随主题');
   autoBtn.addEventListener('click', () => app.setAccent(null));
   dots.appendChild(autoBtn);
   const dotEls = new Map();
@@ -492,7 +507,7 @@ export function openAppearanceDialog(app) {
   // 中间态不落盘（persist:false），松手（change）才存。
   const customLabel = document.createElement('label');
   customLabel.className = 'ap-dot ap-custom';
-  customLabel.title = '自定义颜色';
+  customLabel.title = t('自定义颜色');
   const customInput = document.createElement('input');
   customInput.type = 'color';
   customInput.value = '#4c97ff';
@@ -513,27 +528,27 @@ export function openAppearanceDialog(app) {
   /* --- 字体与字号 --- */
   const fSec = document.createElement('div');
   fSec.className = 'ap-section';
-  fSec.appendChild(sectionLabel('字体与字号'));
+  fSec.appendChild(sectionLabel(t('字体与字号')));
   const uiSel = selectOf(UI_FONTS, 'ap-sel-ui-font');
   const codeSel = selectOf(CODE_FONTS, 'ap-sel-code-font');
   const uiScaleSel = selectOf(SCALES, 'ap-sel-ui-scale');
   const codeScaleSel = selectOf(SCALES, 'ap-sel-code-scale');
-  fSec.appendChild(fieldRow('界面字体', uiSel));
-  fSec.appendChild(fieldRow('界面字号', uiScaleSel));
-  fSec.appendChild(fieldRow('代码字体', codeSel));
-  fSec.appendChild(fieldRow('代码字号', codeScaleSel));
+  fSec.appendChild(fieldRow(t('界面字体'), uiSel));
+  fSec.appendChild(fieldRow(t('界面字号'), uiScaleSel));
+  fSec.appendChild(fieldRow(t('代码字体'), codeSel));
+  fSec.appendChild(fieldRow(t('代码字号'), codeScaleSel));
   body.appendChild(fSec);
 
   /* --- 实时预览：用的就是编辑器自己的高亮函数和 class --- */
   const pSec = document.createElement('div');
   pSec.className = 'ap-section';
-  pSec.appendChild(sectionLabel('预览'));
+  pSec.appendChild(sectionLabel(t('预览')));
   const pre = document.createElement('pre');
   pre.className = 'ap-preview';
   pre.innerHTML = highlight([
     '// @on update',
     'const speed = 3.5;',
-    'tl.move(speed, 0);   // 注释',
+    t('tl.move(speed, 0);   // 注释'),
     "if (vars.hp <= 0) tl.broadcast('game over');",
   ].join('\n'));
   pSec.appendChild(pre);
@@ -542,30 +557,30 @@ export function openAppearanceDialog(app) {
   /* --- 分享码 --- */
   const sSec = document.createElement('div');
   sSec.className = 'ap-section';
-  sSec.appendChild(sectionLabel('分享码'));
+  sSec.appendChild(sectionLabel(t('分享码')));
   const share = document.createElement('div');
   share.className = 'ap-share';
   const shareBox = document.createElement('textarea');
   shareBox.className = 'ap-share-code';
   shareBox.spellcheck = false;
-  shareBox.placeholder = '把一套外观发给别人：点「生成分享码」复制走；拿到别人的就粘到这里点「应用分享码」';
+  shareBox.placeholder = t('把一套外观发给别人：点「生成分享码」复制走；拿到别人的就粘到这里点「应用分享码」');
   share.appendChild(shareBox);
   const shareBtns = document.createElement('div');
   shareBtns.className = 'ap-share-btns';
   const genBtn = document.createElement('button');
-  genBtn.textContent = '生成分享码';
+  genBtn.textContent = t('生成分享码');
   genBtn.addEventListener('click', () => {
     shareBox.value = JSON.stringify(app.exportCode());
     shareBox.focus();
     shareBox.select();
-    toast('已生成，Ctrl+C 复制走', 'info');
+    toast(t('已生成，Ctrl+C 复制走'), 'info');
   });
   const useBtn = document.createElement('button');
-  useBtn.textContent = '应用分享码';
+  useBtn.textContent = t('应用分享码');
   useBtn.addEventListener('click', () => {
-    if (!shareBox.value.trim()) { toast('先粘一份分享码进来', 'warn'); return; }
-    if (app.importCode(shareBox.value)) toast('外观已套用', 'ok');
-    else toast('这个分享码认不出来（一个字段都不认识）', 'err');
+    if (!shareBox.value.trim()) { toast(t('先粘一份分享码进来'), 'warn'); return; }
+    if (app.importCode(shareBox.value)) toast(t('外观已套用'), 'ok');
+    else toast(t('这个分享码认不出来（一个字段都不认识）'), 'err');
   });
   shareBtns.append(genBtn, useBtn);
   share.appendChild(shareBtns);
@@ -573,8 +588,8 @@ export function openAppearanceDialog(app) {
   body.appendChild(sSec);
 
   body.appendChild(hint(
-    '外观只影响编辑器界面，不会写进项目文件 —— 换台机器打开同一个游戏，样式各自保留。<br>' +
-    '积木颜色是 Scratch 官方分类色，不跟着换；独立运行窗口和全屏游玩也保持深色，那是游戏画面。'
+    t('外观只影响编辑器界面，不会写进项目文件 —— 换台机器打开同一个游戏，样式各自保留。<br>') +
+    t('积木颜色是 Scratch 官方分类色，不跟着换；独立运行窗口和全屏游玩也保持深色，那是游戏画面。')
   ));
 
   const sync = () => {
@@ -610,11 +625,11 @@ export function openAppearanceDialog(app) {
 
   let off = null;
   return showModal({
-    title: '外观 · 编辑器',
+    title: t('外观 · 编辑器'),
     body,
     width: 600,
-    cancelText: '完成',
-    okText: '恢复默认',
+    cancelText: t('完成'),
+    okText: t('恢复默认'),
     // 返回 false ＝ 不关窗，改完继续调
     onOk: () => { app.reset(); return false; },
     onMount: () => { off = app.onChange(sync); sync(); },

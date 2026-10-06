@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 /**
  * Tanloom Engine — IR（中间表示）
  * ================================================================
@@ -138,7 +139,7 @@ export function createEntity(name, overrides = {}) {
       height: 48,
       label: ''
     },
-    tags: ['实体'],
+    tags: [t('实体')],
     physics: { gravity: 0, vx: 0, vy: 0, bounce: 0, drag: 0.85, grounded: false },
     scripts: [],
     clones: [],
@@ -146,7 +147,7 @@ export function createEntity(name, overrides = {}) {
   }, overrides);
 }
 
-export function createProject(name = '未命名项目') {
+export function createProject(name = t('未命名项目')) {
   return {
     irVersion: IR_VERSION,
     id: uid('proj'),
@@ -161,7 +162,7 @@ export function createProject(name = '未命名项目') {
       gravity: 980,
       maxBroadcastDepth: 32
     },
-    scene: { background: '#0d1017', grid: true, sceneName: '场景 1' },
+    scene: { background: '#0d1017', grid: true, sceneName: t('场景 1') },
     categories: {},   // id -> CategoryDef
     channels: {},     // name -> ChannelDef
     macros: {},       // id -> MacroDef
@@ -186,16 +187,16 @@ export function validateProject(project, knownStatements = null) {
   const errors = [];
   const warned = [];
 
-  if (!project || typeof project !== 'object') return { ok: false, errors: ['项目为空'], warnings: [] };
-  if (!Array.isArray(project.entities)) errors.push('entities 必须是数组');
-  if (!project.channels || typeof project.channels !== 'object') errors.push('channels 缺失');
+  if (!project || typeof project !== 'object') return { ok: false, errors: [t('项目为空')], warnings: [] };
+  if (!Array.isArray(project.entities)) errors.push(t('entities 必须是数组'));
+  if (!project.channels || typeof project.channels !== 'object') errors.push(t('channels 缺失'));
 
   const stmtTypes = knownStatements || null;
 
   const walkExpr = (n, where) => {
-    if (n == null) { errors.push(`${where}: 表达式为空`); return; }
-    if (typeof n !== 'object') { errors.push(`${where}: 表达式必须是对象`); return; }
-    if (!EXPR_TYPES.has(n.type)) { errors.push(`${where}: 未知表达式类型 ${n.type}`); return; }
+    if (n == null) { errors.push(t('{where}: 表达式为空', { where })); return; }
+    if (typeof n !== 'object') { errors.push(t('{where}: 表达式必须是对象', { where })); return; }
+    if (!EXPR_TYPES.has(n.type)) { errors.push(t('{_1}: 未知表达式类型 {_2}', { _1: where, _2: n.type })); return; }
     for (const [k, v] of Object.entries(n)) {
       if (k === 'type' || typeof v !== 'object' || v === null) continue;
       if (Array.isArray(v)) v.forEach((c, i) => walkExpr(c, `${where}.${k}[${i}]`));
@@ -205,11 +206,11 @@ export function validateProject(project, knownStatements = null) {
 
   const walkSeq = (s, where) => {
     if (!s) return;
-    if (s.type !== 'BlockSequence') { errors.push(`${where}: 期望 BlockSequence，实际 ${s.type}`); return; }
+    if (s.type !== 'BlockSequence') { errors.push(t('{_1}: 期望 BlockSequence，实际 {_2}', { _1: where, _2: s.type })); return; }
     (s.blocks || []).forEach((b, i) => {
       const w = `${where}[${i}]`;
-      if (!b || !b.type) { errors.push(`${w}: 语句缺少 type`); return; }
-      if (stmtTypes && !stmtTypes.has(b.type)) { errors.push(`${w}: 未知语句类型 ${b.type}`); return; }
+      if (!b || !b.type) { errors.push(t('{w}: 语句缺少 type', { w })); return; }
+      if (stmtTypes && !stmtTypes.has(b.type)) { errors.push(t('{_1}: 未知语句类型 {_2}', { _1: w, _2: b.type })); return; }
       for (const [k, v] of Object.entries(b)) {
         if (typeof v !== 'object' || v === null) continue;
         if (v.type === 'BlockSequence') walkSeq(v, `${w}.${k}`);
@@ -217,22 +218,22 @@ export function validateProject(project, knownStatements = null) {
         else if (EXPR_TYPES.has(v.type)) walkExpr(v, `${w}.${k}`);
       }
       if (b.type === 'MacroCallStatement' && !project.macros[b.macroId]) {
-        warned.push(`${w}: 引用不存在的宏 ${b.macroId}`);
+        warned.push(t('{_1}: 引用不存在的宏 {_2}', { _1: w, _2: b.macroId }));
       }
       if ((b.type === 'Broadcast' || b.type === 'BroadcastAndWait') && b.channel && !project.channels[b.channel]) {
-        warned.push(`${w}: 广播频道「${b.channel}」未注册，将自动注册`);
+        warned.push(t('{_1}: 广播频道「{_2}」未注册，将自动注册', { _1: w, _2: b.channel }));
       }
     });
   };
 
   for (const ent of project.entities || []) {
     for (const sc of ent.scripts || []) {
-      if (!sc.hat) errors.push(`实体 ${ent.name} 的脚本缺少 hat`);
+      if (!sc.hat) errors.push(t('实体 {_1} 的脚本缺少 hat', { _1: ent.name }));
       walkSeq(sc.body, `${ent.name}/${sc.id}`);
     }
   }
   for (const [id, macro] of Object.entries(project.macros || {})) {
-    if (!macro.params) warned.push(`宏 ${id} 缺少 params`);
+    if (!macro.params) warned.push(t('宏 {id} 缺少 params', { id }));
     if (macro.kind === 'statement' || macro.kind === 'event') {
       walkSeq(macro.body, `macro:${macro.name}`);
     } else {

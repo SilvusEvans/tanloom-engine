@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node tools/electron.cjs .",
     "dev": "node tools/electron.cjs . --dev",
-    "test": "node tools/test-core.mjs",
+    "test": "node tools/test-core.mjs && node tools/test-i18n.mjs",
     "audit": "node tools/audit-correspondence.mjs",
     "smoke": "node tools/electron.cjs tools/smoke.cjs",
     "ui": "node tools/electron.cjs tools/probe-ui.cjs",
@@ -15,7 +15,8 @@
     "player": "node tools/electron.cjs tools/probe-player.cjs",
     "theme": "node tools/electron.cjs tools/probe-theme.cjs",
     "gallery": "node tools/electron.cjs tools/gallery.cjs",
-    "probe": "node tools/electron.cjs tools/probe-scratch.cjs"
+    "probe": "node tools/electron.cjs tools/probe-scratch.cjs",
+    "i18n": "node tools/test-i18n.mjs"
   },
   "author": "Tanloom Engine",
   "license": "MIT",

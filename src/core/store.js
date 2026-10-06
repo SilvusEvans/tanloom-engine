@@ -8,6 +8,7 @@
  *   · 变更广播（UI 各处订阅）
  */
 
+import { t } from './i18n.js';
 import { cloneIR, createProject, uid } from './ir.js';
 import { generateFiles } from './codegen.js';
 import { parseFile } from './parser.js';
@@ -114,8 +115,8 @@ export class Store {
   /* ---------------- 代码 → IR ---------------- */
   applyCode(fileName, text) {
     const file = this.files.find((f) => f.name === fileName);
-    if (!file || file.readonly) return { ok: false, diagnostics: [{ msg: '该文件只读' }] };
-    this.snapshot('代码同步回积木');
+    if (!file || file.readonly) return { ok: false, diagnostics: [{ msg: t('该文件只读') }] };
+    this.snapshot(t('代码同步回积木'));
     const res = parseFile(text, { project: this.project });
     // 文件丢失的宏 id 需要保留原有 body 之外的元信息
     for (const m of res.macros) {
@@ -148,7 +149,7 @@ export class Store {
       if (!node || typeof node !== 'object') return;
       if ((node.type === 'Broadcast' || node.type === 'BroadcastAndWait') && node.channel) {
         if (!this.project.channels[node.channel]) {
-          this.project.channels[node.channel] = { name: node.channel, builtin: false, order: 100, doc: '由代码自动注册' };
+          this.project.channels[node.channel] = { name: node.channel, builtin: false, order: 100, doc: t('由代码自动注册') };
         }
       }
       for (const v of Object.values(node)) {
@@ -173,12 +174,12 @@ export class Store {
       id: uid('ent'), name, kind: 'sprite', parent: null,
       visible: true, x: 0, y: 0, dir: 90, size: 100, opacity: 100, rotationStyle: 'all',
       render: { shape: 'box', color: '#4C97FF', stroke: '#3373CC', width: 48, height: 48, label: '' },
-      tags: ['实体'], solid: false,
+      tags: [t('实体')], solid: false,
       physics: { gravity: 0, vx: 0, vy: 0, bounce: 0, drag: 1, grounded: false },
       scripts: []
     };
     Object.assign(ent, partial);
-    this.commit(`新建实体 ${ent.name}`, (p) => { p.entities.push(ent); });
+    this.commit(t('新建实体 {_1}', { _1: ent.name }), (p) => { p.entities.push(ent); });
     this.selectedEntityId = ent.id;
     this.emit('select', { entityId: ent.id });
     return ent;
@@ -187,7 +188,7 @@ export class Store {
   removeEntity(id) {
     const ent = this.entityById(id);
     if (!ent) return;
-    this.commit(`删除实体 ${ent.name}`, (p) => {
+    this.commit(t('删除实体 {_1}', { _1: ent.name }), (p) => {
       p.entities = p.entities.filter((e) => e.id !== id);
     });
     if (this.selectedEntityId === id) {
@@ -201,7 +202,7 @@ export class Store {
     if (!ent || !newName || ent.name === newName) return;
     if (this.entityByName(newName)) return;
     const old = ent.name;
-    this.commit(`重命名 ${old} → ${newName}`, (p) => {
+    this.commit(t('重命名 {_1} → {_2}', { _1: old, _2: newName }), (p) => {
       // 引用是按名字存的，重命名要连带改写
       const fix = (node) => {
         if (!node || typeof node !== 'object') return;
@@ -222,7 +223,7 @@ export class Store {
 
   addCategory({ id, name, color, icon, order, scope = 'project' }) {
     const cid = id || uid('cat');
-    this.commit(`新建分类 ${name}`, (p) => {
+    this.commit(t('新建分类 {_1}', { _1: name }), (p) => {
       p.categories[cid] = {
         id: cid, name, color, icon, order: order != null ? order : 120,
         scope, builtin: false, createdBy: 'user', collapsed: false
@@ -232,20 +233,20 @@ export class Store {
   }
 
   updateCategory(id, patch) {
-    this.commit('修改分类', (p) => { Object.assign(p.categories[id], patch); });
+    this.commit(t('修改分类'), (p) => { Object.assign(p.categories[id], patch); });
   }
 
   removeCategory(id) {
     const cat = this.project.categories[id];
     if (!cat || cat.builtin) return;
-    this.commit(`删除分类 ${cat.name}`, (p) => {
+    this.commit(t('删除分类 {_1}', { _1: cat.name }), (p) => {
       for (const m of Object.values(p.macros)) if (m.category === id) m.category = 'myblocks';
       delete p.categories[id];
     });
   }
 
   addMacro(macro) {
-    this.commit(`合成新积木「${macro.name}」`, (p) => {
+    this.commit(t('合成新积木「{_1}」', { _1: macro.name }), (p) => {
       p.macros[macro.id] = macro;
       if (macro.category && !p.categories[macro.category]) {
         p.categories[macro.category] = { id: macro.category, name: macro.category, color: macro.color || '#FF6680', icon: macro.icon || '🧩', order: 120, builtin: false, createdBy: 'user' };
@@ -257,21 +258,21 @@ export class Store {
   removeMacro(id) {
     const m = this.project.macros[id];
     if (!m) return;
-    this.commit(`删除积木「${m.name}」`, (p) => { delete p.macros[id]; });
+    this.commit(t('删除积木「{_1}」', { _1: m.name }), (p) => { delete p.macros[id]; });
   }
 
   addChannel(name) {
     if (this.project.channels[name]) return;
-    this.commit(`注册广播「${name}」`, (p) => {
-      p.channels[name] = { name, builtin: false, order: 100, doc: '用户定义' };
+    this.commit(t('注册广播「{_1}」', { _1: name }), (p) => {
+      p.channels[name] = { name, builtin: false, order: 100, doc: t('用户定义') };
     });
   }
 
   addVariable(name, value = 0) {
-    this.commit(`新建变量 ${name}`, (p) => { p.variables[name] = value; });
+    this.commit(t('新建变量 {_1}', { _1: name }), (p) => { p.variables[name] = value; });
   }
   addList(name) {
-    this.commit(`新建列表 ${name}`, (p) => { p.lists[name] = []; });
+    this.commit(t('新建列表 {_1}', { _1: name }), (p) => { p.lists[name] = []; });
   }
 
   /* ---------------- 脚本操作 ---------------- */
@@ -279,14 +280,14 @@ export class Store {
     const ent = this.entityById(entityId);
     if (!ent) return null;
     const script = { id: uid('script'), hat, body: body || { type: 'BlockSequence', blocks: [] } };
-    this.commit('新建脚本', () => { (ent.scripts = ent.scripts || []).push(script); });
+    this.commit(t('新建脚本'), () => { (ent.scripts = ent.scripts || []).push(script); });
     return script;
   }
 
   removeScript(entityId, scriptId) {
     const ent = this.entityById(entityId);
     if (!ent) return;
-    this.commit('删除脚本', () => { ent.scripts = ent.scripts.filter((s) => s.id !== scriptId); });
+    this.commit(t('删除脚本'), () => { ent.scripts = ent.scripts.filter((s) => s.id !== scriptId); });
   }
 
   /* ---------------- 序列化 ---------------- */

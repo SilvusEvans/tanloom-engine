@@ -20,8 +20,22 @@
  *        'stmt'  —— C 型块的嘴（子栈）
  */
 
+import { t, opt } from '../../core/i18n.js';
 import * as Blockly from '../../vendor/scratch-blocks.js';
 import { SUBSCRIBE_OPTIONS } from '../../core/registry.js';
+
+/**
+ * 把 `[[简体标签, 值], …]` 的下拉项译成当前语言。
+ *
+ * 值（'space' / 'x' / 'frame_start'）在三种语言里**不变**，只有标签变 ——
+ * 所以积木里存的值、生成的代码、项目文件都不会因为切语言而变化。
+ * 标签按「命名空间.值」去 core/i18n-options.js 查（同一个值在不同菜单里
+ * 意思可能不同：`all` 在「停止」里是「全部」、在「旋转方式」里是「任意方向」）。
+ *
+ * 这里在**模块加载时**就译好 —— 语言在 i18n.js 加载时已经定下，
+ * 而切换语言是重载整个窗口，所以不需要惰性求值。
+ */
+const L = (pairs, ns) => pairs.map(([label, value]) => [opt(value, label, ns), value]);
 
 /* ------------------------------------------------------------------ */
 /* 按键：Scratch 用 'space' / 'up arrow'，本引擎 IR 用 KeyboardEvent.code  */
@@ -49,13 +63,13 @@ export const STOP_IN = {
 };
 
 /** 按键下拉项（Scratch 原生那一套） */
-export const KEY_DROPDOWN = [
+export const KEY_DROPDOWN = L([
   ['空格', 'space'], ['↑', 'up arrow'], ['↓', 'down arrow'], ['←', 'left arrow'], ['→', 'right arrow'],
   ['W', 'w'], ['A', 'a'], ['S', 's'], ['D', 'd'], ['J', 'j'], ['K', 'k'], ['L', 'l'], ['任意', 'any'],
-];
+], 'key');
 
 /** 帧阶段（内置广播频道）—— 这些走 df_whenphase 的下拉 */
-export const PHASES = [
+export const PHASES = L([
   ['帧开始', 'frame_start'],
   ['输入', 'input'],
   ['物理更新', 'physics_update'],
@@ -63,7 +77,7 @@ export const PHASES = [
   ['延迟更新', 'late_update'],
   ['渲染', 'render'],
   ['帧结束', 'frame_end'],
-];
+], 'phase');
 export const PHASE_IDS = PHASES.map((p) => p[1]);
 
 /* ------------------------------------------------------------------ */
@@ -124,7 +138,7 @@ function soundOptions() {
   };
 }
 
-const ANIM_OPTIONS = [['待机', 'idle'], ['奔跑', 'run'], ['跳跃', 'jump'], ['受伤', 'hurt']];
+const ANIM_OPTIONS = L([['待机', 'idle'], ['奔跑', 'run'], ['跳跃', 'jump'], ['受伤', 'hurt']], 'anim');
 
 /** 把 [label,value] 数组套成 Blockly 的 field_dropdown 选项（支持动态函数） */
 function dropdown(name, options, def) {
@@ -184,23 +198,23 @@ function jsonArg(kind, name, extra) {
 /* 表                                                                */
 /* ------------------------------------------------------------------ */
 /* 常用下拉常量 */
-const STOP_OPTIONS = [['全部', 'all'], ['这个脚本', 'script'], ['其他脚本', 'others']];
-const ROT_OPTIONS = [['任意方向', 'all'], ['左右翻转', 'left-right'], ['不旋转', 'none']];
-const PROP_OPTIONS = [
-  ['x 坐标', 'x'], ['y 坐标', 'y'], ['方向', 'dir'], ['大小', 'size'],
+const STOP_OPTIONS = L([['全部', 'all'], ['这个脚本', 'script'], ['其他脚本', 'others']], 'stop');
+const ROT_OPTIONS = L([['任意方向', 'all'], ['左右翻转', 'left-right'], ['不旋转', 'none']], 'rot');
+const PROP_OPTIONS = L([
+  ['x 坐标', 'x'], ['y 坐标', 'y'], [t('方向'), 'dir'], ['大小', 'size'],
   ['透明度', 'opacity'], ['x 速度', 'vx'], ['y 速度', 'vy'], ['是否显示', 'visible'],
-];
+], 'prop');
 /** 「把属性设为」只提供没有专门积木的那几个 —— 方向和 core/registry.js 的
  *  SETPROP_OPTIONS 保持一致；读取属性仍然用完整的 PROP_OPTIONS */
 const SETPROP_OPTIONS = PROP_OPTIONS.filter(([, v]) => !['dir', 'size', 'opacity', 'visible'].includes(v));
-const MATH_OPTIONS = [
+const MATH_OPTIONS = L([
   ['绝对值', 'abs'], ['向下取整', 'floor'], ['向上取整', 'ceil'], ['四舍五入', 'round'],
   ['平方根', 'sqrt'], ['10 ^', 'log10'], ['自然对数', 'ln'], ['sin', 'sin'], ['cos', 'cos'], ['tan', 'tan'],
-];
-const PARAM_OPTIONS = [
+], 'math');
+const PARAM_OPTIONS = L([
   ['帧号 frame', 'frame'], ['时间差 delta', 'delta'],
   ['固定步长 fixedDelta', 'fixedDelta'], ['广播参数 value', 'value'],
-];
+], 'param');
 
 /** 每条定义：
  *  block   —— scratch-blocks 的积木类型名
@@ -223,7 +237,7 @@ def({
 
 def({
   block: 'df_whenphase', cat: 'game', shape: 'hat',
-  message: '当收到 %1 广播',
+  message: t('当收到 %1 广播'),
   args: [['PHASE', 'field', 'channel', { phase: true }]],
   match: (n) => n.type === 'OnBroadcast' && PHASE_IDS.includes(n.channel),
   make: (f) => ({ type: 'OnBroadcast', channel: f.PHASE }),
@@ -245,7 +259,7 @@ def({
 
 def({
   block: 'df_whenclick', cat: 'event', shape: 'hat',
-  message: '当 %1 被点击',
+  message: t('当 %1 被点击'),
   args: [['ENTITY', 'field', 'entity', { entity: true }]],
   match: (n) => n.type === 'OnClick',
   make: (f) => ({ type: 'OnClick', entity: f.ENTITY }),
@@ -253,7 +267,7 @@ def({
 
 def({
   block: 'df_whencollision', cat: 'event', shape: 'hat',
-  message: '当 %1 碰到 %2',
+  message: t('当 %1 碰到 %2'),
   args: [['A', 'field', 'a', { entity: true }], ['B', 'field', 'b', { entity: true }]],
   match: (n) => n.type === 'OnCollision',
   make: (f) => ({ type: 'OnCollision', a: f.A, b: f.B }),
@@ -317,7 +331,7 @@ def({
 
 def({
   block: 'df_clone', cat: 'control', shape: 'statement',
-  message: '克隆 %1',
+  message: t('克隆 %1'),
   args: [['ENTITY', 'field', 'entity', { entity: true }]],
   match: (n) => n.type === 'Clone',
   make: (f) => ({ type: 'Clone', entity: f.ENTITY }),
@@ -331,7 +345,7 @@ def({
 
 def({
   block: 'df_broadcast', cat: 'control', shape: 'statement',
-  message: '广播 %1 参数 %2',
+  message: t('广播 %1 参数 %2'),
   args: [['CHANNEL', 'field', 'channel', { channel: true }], ['VALUE', 'value', 'value']],
   match: (n) => n.type === 'Broadcast',
   make: (f) => ({ type: 'Broadcast', channel: f.CHANNEL, value: f.VALUE }),
@@ -339,7 +353,7 @@ def({
 
 def({
   block: 'df_set_subscribed', cat: 'control', shape: 'statement',
-  message: '将 %1 广播订阅状态设为 %2',
+  message: t('将 %1 广播订阅状态设为 %2'),
   args: [
     ['CHANNEL', 'field', 'channel', { channel: true }],
     ['STATE', 'field', 'state', { select: SUBSCRIBE_OPTIONS }],
@@ -350,7 +364,7 @@ def({
 
 def({
   block: 'df_broadcast_wait', cat: 'control', shape: 'statement',
-  message: '广播 %1 参数 %2 并等待',
+  message: t('广播 %1 参数 %2 并等待'),
   args: [['CHANNEL', 'field', 'channel', { channel: true }], ['VALUE', 'value', 'value']],
   match: (n) => n.type === 'BroadcastAndWait',
   make: (f) => ({ type: 'BroadcastAndWait', channel: f.CHANNEL, value: f.VALUE }),
@@ -359,7 +373,7 @@ def({
 /* ---------------- 运动 ---------------- */
 def({
   block: 'df_move_by', cat: 'motion', shape: 'statement',
-  message: '移动 %1 水平 %2 垂直 %3',
+  message: t('移动 %1 水平 %2 垂直 %3'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['DX', 'value', 'dx'], ['DY', 'value', 'dy']],
   match: (n) => n.type === 'MoveBy',
   make: (f) => ({ type: 'MoveBy', entity: f.ENTITY, dx: f.DX, dy: f.DY }),
@@ -367,7 +381,7 @@ def({
 
 def({
   block: 'df_set_pos', cat: 'motion', shape: 'statement',
-  message: '把 %1 移到 x: %2 y: %3',
+  message: t('把 %1 移到 x: %2 y: %3'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['X', 'value', 'x'], ['Y', 'value', 'y']],
   match: (n) => n.type === 'SetPosition',
   make: (f) => ({ type: 'SetPosition', entity: f.ENTITY, x: f.X, y: f.Y }),
@@ -375,7 +389,7 @@ def({
 
 def({
   block: 'df_change_x', cat: 'motion', shape: 'statement',
-  message: '把 %1 的 x 坐标增加 %2',
+  message: t('把 %1 的 x 坐标增加 %2'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['DX', 'value', 'dx']],
   match: (n) => n.type === 'ChangeX',
   make: (f) => ({ type: 'ChangeX', entity: f.ENTITY, dx: f.DX }),
@@ -383,7 +397,7 @@ def({
 
 def({
   block: 'df_change_y', cat: 'motion', shape: 'statement',
-  message: '把 %1 的 y 坐标增加 %2',
+  message: t('把 %1 的 y 坐标增加 %2'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['DY', 'value', 'dy']],
   match: (n) => n.type === 'ChangeY',
   make: (f) => ({ type: 'ChangeY', entity: f.ENTITY, dy: f.DY }),
@@ -391,7 +405,7 @@ def({
 
 def({
   block: 'df_set_prop', cat: 'motion', shape: 'statement',
-  message: '把 %1 的 %2 设为 %3',
+  message: t('把 %1 的 %2 设为 %3'),
   args: [
     ['ENTITY', 'field', 'entity', { entity: true }],
     ['PROP', 'field', 'prop', { select: SETPROP_OPTIONS }],
@@ -403,7 +417,7 @@ def({
 
 def({
   block: 'df_face', cat: 'motion', shape: 'statement',
-  message: '让 %1 面向 %2 度',
+  message: t('让 %1 面向 %2 度'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['DIR', 'value', 'dir']],
   match: (n) => n.type === 'FaceDirection',
   make: (f) => ({ type: 'FaceDirection', entity: f.ENTITY, dir: f.DIR }),
@@ -411,7 +425,7 @@ def({
 
 def({
   block: 'df_rotate', cat: 'motion', shape: 'statement',
-  message: '让 %1 旋转 %2 度',
+  message: t('让 %1 旋转 %2 度'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['DEG', 'value', 'deg']],
   match: (n) => n.type === 'Rotate',
   make: (f) => ({ type: 'Rotate', entity: f.ENTITY, deg: f.DEG }),
@@ -419,7 +433,7 @@ def({
 
 def({
   block: 'df_set_velocity', cat: 'motion', shape: 'statement',
-  message: '设置 %1 的速度 vx: %2 vy: %3',
+  message: t('设置 %1 的速度 vx: %2 vy: %3'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['VX', 'value', 'vx'], ['VY', 'value', 'vy']],
   match: (n) => n.type === 'SetVelocity',
   make: (f) => ({ type: 'SetVelocity', entity: f.ENTITY, vx: f.VX, vy: f.VY }),
@@ -427,7 +441,7 @@ def({
 
 def({
   block: 'df_jump', cat: 'motion', shape: 'statement',
-  message: '让 %1 跳跃 力度 %2',
+  message: t('让 %1 跳跃 力度 %2'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['POWER', 'value', 'power']],
   match: (n) => n.type === 'Jump',
   make: (f) => ({ type: 'Jump', entity: f.ENTITY, power: f.POWER }),
@@ -435,7 +449,7 @@ def({
 
 def({
   block: 'df_set_gravity', cat: 'motion', shape: 'statement',
-  message: '设置 %1 的重力为 %2',
+  message: t('设置 %1 的重力为 %2'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['G', 'value', 'g']],
   match: (n) => n.type === 'SetGravity',
   make: (f) => ({ type: 'SetGravity', entity: f.ENTITY, g: f.G }),
@@ -443,7 +457,7 @@ def({
 
 def({
   block: 'df_bounce', cat: 'motion', shape: 'statement',
-  message: '%1 碰到边缘就反弹',
+  message: t('%1 碰到边缘就反弹'),
   args: [['ENTITY', 'field', 'entity', { entity: true }]],
   match: (n) => n.type === 'BounceOnEdge',
   make: (f) => ({ type: 'BounceOnEdge', entity: f.ENTITY }),
@@ -452,7 +466,7 @@ def({
 /* ---------------- 外观 ---------------- */
 def({
   block: 'df_show', cat: 'looks', shape: 'statement',
-  message: '显示 %1',
+  message: t('显示 %1'),
   args: [['ENTITY', 'field', 'entity', { entity: true }]],
   match: (n) => n.type === 'Show',
   make: (f) => ({ type: 'Show', entity: f.ENTITY }),
@@ -460,7 +474,7 @@ def({
 
 def({
   block: 'df_hide', cat: 'looks', shape: 'statement',
-  message: '隐藏 %1',
+  message: t('隐藏 %1'),
   args: [['ENTITY', 'field', 'entity', { entity: true }]],
   match: (n) => n.type === 'Hide',
   make: (f) => ({ type: 'Hide', entity: f.ENTITY }),
@@ -468,7 +482,7 @@ def({
 
 def({
   block: 'df_set_size', cat: 'looks', shape: 'statement',
-  message: '把 %1 的大小设为 %2 %%',
+  message: t('把 %1 的大小设为 %2 %%'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['SIZE', 'value', 'size']],
   match: (n) => n.type === 'SetSize',
   make: (f) => ({ type: 'SetSize', entity: f.ENTITY, size: f.SIZE }),
@@ -476,7 +490,7 @@ def({
 
 def({
   block: 'df_change_size', cat: 'looks', shape: 'statement',
-  message: '把 %1 的大小增加 %2 %%',
+  message: t('把 %1 的大小增加 %2 %%'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['D', 'value', 'd']],
   match: (n) => n.type === 'ChangeSize',
   make: (f) => ({ type: 'ChangeSize', entity: f.ENTITY, d: f.D }),
@@ -484,7 +498,7 @@ def({
 
 def({
   block: 'df_set_opacity', cat: 'looks', shape: 'statement',
-  message: '把 %1 的透明度设为 %2 %%',
+  message: t('把 %1 的透明度设为 %2 %%'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['OP', 'value', 'op']],
   match: (n) => n.type === 'SetOpacity',
   make: (f) => ({ type: 'SetOpacity', entity: f.ENTITY, op: f.OP }),
@@ -492,7 +506,7 @@ def({
 
 def({
   block: 'df_anim', cat: 'looks', shape: 'statement',
-  message: '播放 %1 的动画 %2',
+  message: t('播放 %1 的动画 %2'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['NAME', 'field', 'name', { animation: true }]],
   match: (n) => n.type === 'PlayAnimation',
   make: (f) => ({ type: 'PlayAnimation', entity: f.ENTITY, name: f.NAME }),
@@ -500,7 +514,7 @@ def({
 
 def({
   block: 'df_say', cat: 'looks', shape: 'statement',
-  message: '让 %1 说 %2 %3 秒',
+  message: t('让 %1 说 %2 %3 秒'),
   args: [
     ['ENTITY', 'field', 'entity', { entity: true }],
     ['TEXT', 'value', 'text', { text: true }],
@@ -512,7 +526,7 @@ def({
 
 def({
   block: 'df_set_color', cat: 'looks', shape: 'statement',
-  message: '把 %1 的颜色设为 %2',
+  message: t('把 %1 的颜色设为 %2'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['COLOR', 'field', 'color', { color: '#FFD500' }]],
   match: (n) => n.type === 'SetColor',
   make: (f) => ({ type: 'SetColor', entity: f.ENTITY, color: f.COLOR }),
@@ -521,7 +535,7 @@ def({
 /* ---------------- 声音 ---------------- */
 def({
   block: 'df_play_sound', cat: 'sound', shape: 'statement',
-  message: '播放声音 %1',
+  message: t('播放声音 %1'),
   args: [['SOUND_MENU', 'field', 'name', { sound: true }]],
   match: (n) => n.type === 'PlaySound',
   make: (f) => ({ type: 'PlaySound', name: f.SOUND_MENU }),
@@ -549,7 +563,7 @@ def({
 
 def({
   block: 'df_touching', cat: 'sensing', shape: 'boolean',
-  message: '%1 碰到 %2 ?',
+  message: t('%1 碰到 %2 ?'),
   args: [['A', 'field', 'a', { entity: true }], ['B', 'field', 'b', { entity: true }]],
   match: (n) => n.type === 'Touching',
   make: (f) => ({ type: 'Touching', a: f.A, b: f.B }),
@@ -557,7 +571,7 @@ def({
 
 def({
   block: 'df_distance', cat: 'sensing', shape: 'reporter',
-  message: '%1 到 %2 的距离',
+  message: t('%1 到 %2 的距离'),
   args: [['A', 'field', 'a', { entity: true }], ['B', 'field', 'b', { entity: true }]],
   match: (n) => n.type === 'DistanceTo',
   make: (f) => ({ type: 'DistanceTo', a: f.A, b: f.B }),
@@ -565,7 +579,7 @@ def({
 
 def({
   block: 'df_key_down', cat: 'sensing', shape: 'boolean',
-  message: '按下 %1 键?',
+  message: t('按下 %1 键?'),
   args: [['KEY', 'field', 'key', { key: true }]],
   match: (n) => n.type === 'KeyDown',
   make: (f) => ({ type: 'KeyDown', key: SCRATCH_TO_KEY[f.KEY] || f.KEY }),
@@ -597,7 +611,7 @@ def({
 
 def({
   block: 'df_get_prop', cat: 'sensing', shape: 'reporter',
-  message: '%1 的 %2',
+  message: t('%1 的 %2'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['PROP', 'field', 'prop', { select: PROP_OPTIONS }]],
   match: (n) => n.type === 'GetProp',
   make: (f) => ({ type: 'GetProp', entity: f.ENTITY, prop: f.PROP }),
@@ -839,31 +853,31 @@ def({
 const gameDef = (o) => def({ cat: 'game', ...o });
 
 gameDef({
-  block: 'df_switch_scene', shape: 'statement', message: '切换到场景 %1',
+  block: 'df_switch_scene', shape: 'statement', message: t('切换到场景 %1'),
   args: [['NAME', 'value', 'name', { text: true }]],
   match: (n) => n.type === 'SwitchScene',
   make: (f) => ({ type: 'SwitchScene', name: f.NAME }),
 });
 gameDef({
-  block: 'df_save', shape: 'statement', message: '存档到 %1',
+  block: 'df_save', shape: 'statement', message: t('存档到 %1'),
   args: [['SLOT', 'value', 'slot', { text: true }]],
   match: (n) => n.type === 'SaveGame',
   make: (f) => ({ type: 'SaveGame', slot: f.SLOT }),
 });
 gameDef({
-  block: 'df_load', shape: 'statement', message: '读取存档 %1',
+  block: 'df_load', shape: 'statement', message: t('读取存档 %1'),
   args: [['SLOT', 'value', 'slot', { text: true }]],
   match: (n) => n.type === 'LoadGame',
   make: (f) => ({ type: 'LoadGame', slot: f.SLOT }),
 });
 gameDef({
-  block: 'df_camera', shape: 'statement', message: '让相机跟随 %1 平滑 %2',
+  block: 'df_camera', shape: 'statement', message: t('让相机跟随 %1 平滑 %2'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['K', 'value', 'k']],
   match: (n) => n.type === 'CameraFollow',
   make: (f) => ({ type: 'CameraFollow', entity: f.ENTITY, k: f.K }),
 });
 gameDef({
-  block: 'df_particles', shape: 'statement', message: '在 %1 处播放 %2 个粒子 颜色 %3',
+  block: 'df_particles', shape: 'statement', message: t('在 %1 处播放 %2 个粒子 颜色 %3'),
   args: [
     ['ENTITY', 'field', 'entity', { entity: true }],
     ['N', 'value', 'n'],
@@ -873,36 +887,36 @@ gameDef({
   make: (f) => ({ type: 'EmitParticles', entity: f.ENTITY, n: f.N, color: f.COLOR }),
 });
 gameDef({
-  block: 'df_ui_text', shape: 'statement', message: '把 HUD 文字设为 %1',
+  block: 'df_ui_text', shape: 'statement', message: t('把 HUD 文字设为 %1'),
   args: [['TEXT', 'value', 'text', { text: true }]],
   match: (n) => n.type === 'UISetText',
   make: (f) => ({ type: 'UISetText', text: f.TEXT }),
 });
 gameDef({
-  block: 'df_shake', shape: 'statement', message: '屏幕震动 强度 %1',
+  block: 'df_shake', shape: 'statement', message: t('屏幕震动 强度 %1'),
   args: [['N', 'value', 'n']],
   match: (n) => n.type === 'ShakeScreen',
   make: (f) => ({ type: 'ShakeScreen', n: f.N }),
 });
 gameDef({
-  block: 'df_spawn', shape: 'statement', message: '生成 %1 于 x: %2 y: %3',
+  block: 'df_spawn', shape: 'statement', message: t('生成 %1 于 x: %2 y: %3'),
   args: [['ENTITY', 'field', 'entity', { entity: true }], ['X', 'value', 'x'], ['Y', 'value', 'y']],
   match: (n) => n.type === 'SpawnEntity',
   make: (f) => ({ type: 'SpawnEntity', entity: f.ENTITY, x: f.X, y: f.Y }),
 });
 gameDef({
-  block: 'df_destroy', shape: 'statement', message: '销毁 %1',
+  block: 'df_destroy', shape: 'statement', message: t('销毁 %1'),
   args: [['ENTITY', 'field', 'entity', { entity: true }]],
   match: (n) => n.type === 'DestroyEntity',
   make: (f) => ({ type: 'DestroyEntity', entity: f.ENTITY }),
 });
 gameDef({
-  block: 'df_scene_name', shape: 'reporter', message: '当前场景名', args: [],
+  block: 'df_scene_name', shape: 'reporter', message: t('当前场景名'), args: [],
   match: (n) => n.type === 'CurrentScene',
   make: () => ({ type: 'CurrentScene' }),
 });
 gameDef({
-  block: 'df_clone_count', shape: 'reporter', message: '克隆体数量', args: [],
+  block: 'df_clone_count', shape: 'reporter', message: t('克隆体数量'), args: [],
   match: (n) => n.type === 'CloneCount',
   make: () => ({ type: 'CloneCount' }),
 });
@@ -910,14 +924,14 @@ gameDef({
 /* ---------------- 代码积木 ---------------- */
 def({
   block: 'df_code_stmt', cat: 'myblocks', shape: 'statement',
-  message: '⚙ 执行代码 %1',
+  message: t('⚙ 执行代码 %1'),
   args: [['CODE', 'field', 'code', { text: true, multiline: true }]],
   match: (n) => n.type === 'CodeBlockStatement',
   make: (f) => ({ type: 'CodeBlockStatement', code: f.CODE }),
 });
 def({
   block: 'df_code_expr', cat: 'myblocks', shape: 'reporter',
-  message: '⚙ 代码 %1',
+  message: t('⚙ 代码 %1'),
   args: [['CODE', 'field', 'code', { text: true, multiline: true }]],
   match: (n) => n.type === 'CodeBlock',
   make: (f) => ({ type: 'CodeBlock', code: f.CODE }),
@@ -961,11 +975,11 @@ export function defineBlocks() {
     Blockly.Blocks.df_unknown = {
       init() {
         this.jsonInit({
-          message0: '⚠ 未识别 %1',
+          message0: t('⚠ 未识别 %1'),
           args0: [{ type: 'field_input', name: 'TEXT', text: '' }],
           extensions: [colourExtension('more'), 'shape_statement'],
         });
-        this.setTooltip('这个积木在当前版本的引擎里没有对应实现，原样保留以免丢数据');
+        this.setTooltip(t('这个积木在当前版本的引擎里没有对应实现，原样保留以免丢数据'));
       },
     };
   }
@@ -994,7 +1008,7 @@ export function defineMacroBlocks(macros, onlyIds) {
           extensions: [colourExtension(styleId),
             macro.kind === 'expression' ? 'output_number' : 'shape_statement'],
         });
-        this.setTooltip(`合成积木 · ${macro.name}`);
+        this.setTooltip(t('合成积木 · {_1}', { _1: macro.name }));
       },
     };
   }

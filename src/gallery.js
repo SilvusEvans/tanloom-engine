@@ -11,6 +11,7 @@
  */
 
 import * as Blockly from './vendor/scratch-blocks.js';
+import { scratchLocale } from './core/i18n.js';
 import { MEDIA_URL } from './vendor/scratch-blocks.js';
 import { ALL_DEFS, instantiate } from './core/blockdefs.js';
 import { buildTheme } from './blocks/scratch/theme.js';
@@ -59,7 +60,7 @@ configure({
 defineBlocks();
 
 window.__gallery = (async () => {
-  Blockly.ScratchMsgs.setLocale('zh-cn');
+  Blockly.ScratchMsgs.setLocale(scratchLocale());
   const host = document.getElementById('board');
   const ws = Blockly.inject(host, {
     theme: buildTheme(PROJECT),

@@ -87,6 +87,15 @@ function openPlayerWindow(payload) {
 }
 
 function registerIpc() {
+  // ---- 界面语言：系统语言 ----
+  // 同步回一次就够（preload 在页面脚本之前跑）。用 sendSync 是因为
+  // i18n.js 在**模块加载时**就要定下语言，异步来不及。
+  ipcMain.on('tl:system-locale', (e) => {
+    let loc = '';
+    try { loc = require('electron').app.getSystemLocale(); } catch { loc = ''; }
+    e.returnValue = loc || '';
+  });
+
   // ---- 全屏游玩 ----
   // 渲染进程的「全屏游玩」是两层：一层是盖住编辑器的舞台层，
   // 另一层是真的让窗口占满屏幕（连标题栏一起去掉）。后者只能主进程做。

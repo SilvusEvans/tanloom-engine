@@ -1,3 +1,4 @@
+import { t } from '../core/i18n.js';
 /**
  * Tanloom Engine — 通用 UI 组件：菜单 / 内联编辑 / 对话框 / 轻提示
  */
@@ -152,11 +153,11 @@ export function showModal(o) {
   };
   document.addEventListener('keydown', onEsc, true);
   const cancel = document.createElement('button');
-  cancel.textContent = o.cancelText || '取消';
+  cancel.textContent = o.cancelText || t('取消');
   cancel.addEventListener('click', close);
   const okBtn = document.createElement('button');
   okBtn.className = 'primary';
-  okBtn.textContent = o.okText || '保存';
+  okBtn.textContent = o.okText || t('保存');
   okBtn.addEventListener('click', async () => {
     const r = o.onOk ? await o.onOk() : true;
     if (r !== false) close();

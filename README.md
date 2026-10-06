@@ -1,541 +1,226 @@
-# Tanloom Engine · 双模游戏引擎
+# Tanloom Engine
 
-> **画得出，也写得出。** 图形化积木与代码编程不是两个引擎，而是同一份项目数据的两个视图。
+> 🌐 **English** · [简体中文](README.zh-Hans.md)
 
-Electron 桌面应用。核心是**一份 IR（中间表示）**，积木视图、代码视图、场景视图都是它的投影。
+**Draw it, or write it.** Blocks and code are not two implementations of the same idea — they are two
+projections of one project file. An Electron desktop app for 2D games.
 
 ```
-       积木编辑器            代码编辑器            场景编辑器
-     (scratch-blocks)       (Monaco 式高亮)        (视口 + 层级)
-     与 Scratch 同一套渲染器
-            \                    |                    /
-             \                   |                   /
-              +--------→  IR（唯一真源）←--------+
-                          |
-                    广播总线 + ECS 运行时
-                          |
-                 Web / 桌面 / 未来：移动端
+    Block editor            Code editor             Scene editor
+  (scratch-blocks)      (highlighted TS)      (viewport + hierarchy)
+        \                      |                       /
+         \                     |                      /
+          ──────────  one IR, the single source of truth  ──────────
+                              |
+                       project file (.tle)
 ```
+
+Everything you change anywhere goes into the IR first; every view re-projects from it. Edit blocks and the
+TypeScript is rewritten; edit the TypeScript, press <kbd>Ctrl</kbd>+<kbd>S</kbd>, and the blocks are rebuilt.
+Anything the parser does not recognize is kept verbatim as a "code block", so nothing is ever lost.
+
+**Interface languages:** English · 简体中文 · 繁體中文 (see [Language](#language)).
 
 ---
 
-## 快速开始
+## Quick start
 
 ```bash
-# 方式一：直接跑（本机没装 Electron 也能跑，二进制已内置）
-node tools/electron.cjs .
-
-# 方式二：npm
-npm start          # 启动编辑器
-npm run dev        # 带开发者工具
-npm test           # 核心自测（纯 Node，92 项）
-npm run audit      # 对应性审计：每个积木逐个「代码 ↔ 积木」往返，列出做不到的
-npm run smoke      # 真机冒烟测试（Electron 里跑满 53 项断言 + 截图）
-npm run ui         # 界面流程测试（新建分类 / 新建积木两条路径，真点真填）
-npm run bubble     # 取值气泡与点击核对（官方外观 / 定位 / 点标签出值 / 字段让路）
-npm run player     # 独立运行窗口核对（开窗 / 在跑 / 键盘能玩 / 热重载 / 关窗复位）
-npm run theme      # 外观核对（主题 / 重点色 / 字体字号 / 跟随系统 / 分享码，全部比对计算后样式）
-npm run gallery    # 把 98 块积木全渲染一遍出总览图
-npm run probe      # 让 scratch-blocks 吐出每个积木的输入/字段名（改映射表时用）
+git clone git@github.com:SilvusEvans/tanloom-engine.git
+cd tanloom-engine
+npm install          # scratch-blocks + electron
+npm start            # launch the editor
 ```
 
-打开就是一个能玩的平台跳跃小游戏：**方向键移动、空格跳跃、K 克隆**。
-点 `▶ 运行` 或按 `F5`。
+| Command | What it does |
+|---|---|
+| `npm start` / `npm run dev` | Launch the editor (dev adds DevTools) |
+| `npm test` | Core self-test + i18n check (pure Node, seconds) |
+| `npm run i18n` | i18n only: missing translations, placeholder parity, dropdown coverage |
+| `npm run audit` | Per-block round trip: IR → code → IR for every block × every option value |
+| `npm run smoke` | 53 assertions in a real Electron window, zero console errors, saves screenshots |
+| `npm run ui` | 11 UI flow tests (click real buttons, fill real forms, real right-click) |
+| `npm run bubble` | 21 value-bubble checks (official look, positioning, click-to-evaluate) |
+| `npm run player` | 18 checks on the separate player window (cross-process, end to end) |
+| `npm run theme` | 38 appearance checks (theme / accent / fonts / sizes / share code) |
+| `npm run gallery` | Render every block once into a single overview PNG |
+
+Requirements: Node 22+, a desktop environment. The editor loads its own resources over a custom
+`tanloom://` protocol handled by the main process — no local HTTP server, so no ports, no proxies, no timeouts.
 
 ---
 
-## 五个核心机制
+## Core mechanisms
 
-### 1. 单一真源：IR
+### 1. One IR, the single source of truth
 
-所有逻辑、场景、资源都存成一份纯 JSON。积木和代码都不持有状态，改的都是 IR：
+The IR is plain JSON: entities, scripts (hat + body), variables, lists, channels, macros, scenes.
+Blocks are an editing surface, the `.ts` files are a projection, and the runtime executes the IR directly
+(no compiling to JS in the middle). Because exactly one place holds the truth, "the code and the blocks
+disagree" is not a state the app can be in.
 
-```
-积木拖拽  ──→  IR  ──→  重新生成代码
-代码编辑  ──→  IR  ──→  重新渲染积木
-```
+### 2. A per-frame broadcast bus (borrowed from Godot)
 
-参见 `src/core/ir.js`（节点定义）、`src/core/blockdefs.js`（98 块积木的定义表）。
-
-### 2. 每帧广播，脚本订阅（借鉴 Godot）
-
-引擎每帧按固定阶段推进，每个阶段广播一次，脚本用帽块订阅：
+Each frame broadcasts, in order:
 
 ```
-frame_start → input → physics_update(可多次) → update → late_update → render → frame_end
+frame_start → input → physics_update → update → late_update → render → frame_end
 ```
 
-**按键、碰撞、计时器、自定义事件全部是同一条总线上的广播** —— 没有第二套机制。
+Scripts subscribe with hat blocks. Keys, collisions, clicks and custom events all travel the same bus —
+one dispatch path, not five. `physics_update` may run several times per frame (fixed timestep), the others once.
 
-- 积木视角：`当收到 [update]`
-- 代码视角：`// @on update`
+### 3. Blocks are Scratch's own renderer
 
-调度器在 `src/runtime/vm.js`。执行器用生成器做协程驱动，**能同步跑完就绝不拖到下一帧**，
-所以一帧内的多个 `physics_update` 子步都能正常执行脚本。
+The block view uses the official `scratch-blocks` (2.1.27), so block shapes, colours, drag snapping and
+insertion markers behave exactly as they do in Scratch. Native Scratch blocks are used wherever one exists
+(motion, looks, control, operators, variables, lists, sensing, sound); only engine-specific concepts
+(frame phases, entity coordinates, physics, broadcasts with arguments, game helpers) register custom blocks.
 
-#### 订阅状态可以在运行时开关
+### 4. A block language that can grow
 
-```
-将 [update ▾] 广播订阅状态设为 [订阅 ▾ / 取消订阅 ▾]      （控制分类）
-```
+Right-click a stack → **compose new block**: pick parameters, write the TypeScript body, and it becomes a real
+block. Composite blocks can be used inside further composites, and filed into built-in categories or brand-new
+ones. The palette is generated from the definition table — nothing is hand-maintained.
 
-作用在**自己**身上：控制这个实体在该频道上的脚本要不要响应。典型用法是
-「碰到陷阱 → 取消订阅 update → 玩家冻住」，「过关 → 重新订阅」。
+### 5. Blocks and code stay in sync — verified, not hoped
 
-实现上有三个刻意的决定：
+`npm run audit` walks **every block × every dropdown value** (96 blocks, 162 variants today) through a real
+round trip: minimal IR → generated `.ts` → parsed back → compared **node for node**, not just by type.
+It catches the subtle ones: "set vx to" coming back as "set x to", a whole dropdown family collapsing into
+one block, `++` in a generated `for` loop losing the loop.
 
-- **不是把订阅项删掉，而是给它挂一个开关。** 删了就再也「订阅」不回来了；
-  挂开关则可逆，而且状态跟着订阅项走 —— 订阅表只在 `load()` 时重建，
-  所以**重新点运行会回到初始状态**，而改积木（热重载）不会把它弄丢。
-- **取消订阅时顺手把正在跑的那条脚本停掉。** 否则「取消订阅每帧更新」对一个
-  `一直重复` 的脚本毫无作用 —— 而「让敌人停止巡逻」正是最常见的用法。
-- 开关的检查放在 `_fire()` 里而不是 `_dispatch()`：按键 / 碰撞 / 点击走的是别的派发路径，
-  放一处才能全覆盖。
+### 6. Click a block to run it
 
-底部调试坞的**订阅列表**会把取消掉的项灰掉并标「已取消订阅」，否则这个开关在界面上完全不可见。
+Clicking a statement block runs its whole stack (starting the project first if it is not running); clicking a
+round or hexagonal block evaluates it and pops a value bubble. Label text such as "say" or "seconds" does not
+swallow the click — only genuinely editable fields do.
 
-> 这块积木的**运行时语义在 `npm test` 里验**（纯 Node 直接步进 Runtime，
-> 秒级且确定：跑 30 帧不涨 → 取消订阅 → 不涨 → 重新订阅 → 接着涨）；
-> **注册与下拉在 `npm run smoke` 里验**（只有真机才有渲染器）。
+### 7. Keyboard, fullscreen, player window
 
-### 3. 积木 = Scratch 官方渲染器
+Real keys are wired to the runtime (<kbd>F5</kbd> run/stop, <kbd>F6</kbd> run in a separate window,
+<kbd>F11</kbd> fullscreen, <kbd>Esc</kbd> leave). In fullscreen the keyboard belongs to the game: arrow keys
+do not scroll and space does not press buttons. The player window runs a second runtime in its own process and
+hot-reloads when you edit blocks in the editor.
 
-积木**不是自己画的**，而是直接用 Scratch 官网编辑器用的那个包：
+### 8. Appearance
 
-```
-node_modules/scratch-blocks  →  scratch-blocks 2.1.27（Blockly 内核 + Scratch 渲染器）
-```
-
-所以形状、配色、燕尾槽互锁、拖拽吸附、插入标记、缩放、垃圾桶、右键菜单、
-变量/消息的自动建模型，全部与 Scratch 逐像素一致。
-实测锚点（`npm run smoke` 会断言）：帽块 72.5px、纯语句块 56px、数字字段 40×32。
-
-我们要写的只有**两份表示之间的翻译**：`src/blocks/scratch/`
-
-| 文件 | 职责 |
-|---|---|
-| `defs.js` | 一张映射表：一条记录同时驱动积木注册、IR→XML、XML→IR |
-| `sync.js` | IR ↔ 积木 XML 的双向投影（字面量→shadow，子栈→statement） |
-| `theme.js` | 分类配色 → Blockly 主题 |
-| `toolbox.js` | 从 `blockdefs.js` 遍历生成选择区，默认值不重复维护 |
-| `workspace.js` | 工作区宿主：每实体一份状态、写回 IR、右键「合成新积木」 |
-
-能复用 Scratch 原生积木的就复用（控制、运算、变量、列表、侦测、声音），
-只有本引擎特有的概念（帧阶段、实体坐标、物理、带参广播、游戏专用）才注册 `df_` 自定义积木。
-
-**结果：98 块积木全部有对应定义，零降级** —— `npm run gallery` 出图核对。
-
-### 4. 可生长的积木语言
-
-```
-基础积木 → 合成积木 → 进入选择区 → 继续合成 → 领域积木
-```
-
-在积木上**右键** → **合成新积木**（挂在 Blockly 的原生上下文菜单上）：
-- 自动把字面量槽位识别为「自由变量」，勾选即提升为参数
-- 可归入内置分类（运动/运算…），也可新建分类（颜色、图标、排序、可见性）
-- 三种代码生成策略：内联展开 / 函数调用 / 原生映射
-- 调用点右键可**展开**成基础积木；`version` 字段避免旧项目被新定义破坏
-
-示例项目里 `受伤 (伤害)` 就是自定义分类「战斗系统」下的语句型合成积木，
-`平方 / 立方` 演示了表达式型与嵌套合成。
-
-### 5. 双界面同步
-
-生成的代码是**人能读、人能改**的受限 TypeScript 子集：
-
-```ts
-// @tl:script script_x8f2
-// @on update
-export async function onUpdate(ctx: FrameCtx) {
-  const self = ctx.self;
-  self.vx = 0;
-  if (tl.keyDown("ArrowLeft")) { self.vx = (-(vars.速度)); self.dir = -90; }
-  if (tl.keyDown("Space") && (self.vy < 1)) { tl.jump(self, ((3 * 3) * 48)); }
-}
-```
-
-- 在代码视图按 **Ctrl+S** → 解析回积木（注解是锚点，`// @tl:script <id>` 保证脚本身份不丢）
-- 认识不了的写法**降级为「代码积木」原样保留**，所以往返永远无损
-- 两边都改过会弹出冲突条：以代码为准 / 以积木为准
-
-### 6. 点击积木就能执行
-
-和 Scratch 一样的习惯，不用先按运行：
-
-| 点的是什么 | 会发生什么 |
-|---|---|
-| 语句块 | 把它所在**一整条栈从头跑一遍**（不是只跑点中的那一块）；在 C 型块嘴里就只跑那条子栈 |
-| 圆形 / 六边形积木 | 算出当前值，弹一个取值气泡（见下） |
-| 下拉字段 | 只是换个选项，不执行 |
-| 选择区里的**圆形**积木 | 也出值（原版行为）—— 选择区里只有这一种会响应点击 |
-| 选择区里的语句块 | 不执行（那是用来拖的） |
-
-#### 取值气泡直接用原版那一套
-
-不自己画 div。scratch-blocks 自己导出了 `Blockly.reportValue(id, value)`，
-Scratch 编辑器就是调它 —— 气泡本体是 Blockly 的 `DropDownDiv`：
-
-```
-Blockly.reportValue(blockId, text)
-  → 往 DropDownDiv 的内容区塞一个 .valueReportBox
-  → DropDownDiv.setColour('#FFFFFF', '#AAAAAA')
-  → DropDownDiv.showPositionedByBlock(积木的第一个字段, 积木)
-```
-
-所以白色圆角、`#AAA` 边框、朝上的小箭头、贴边翻转、长文本 `max-width:300` 自动滚动、
-「跟着第一个字段居中、落在积木下方」的定位，全都天然一致 —— 自己画的话这些都得重做一遍，
-而且怎么调都不像（试过，确实不像）。
-
-值的口径也跟原版对齐：统一走运行时的 `toStr`（数字去浮点噪声、布尔输出 `true` / `false`），
-和 `说` / `连接` 这些积木一致。
-
-**一个容易踩的坑**：Blockly 的 DropDownDiv 占用的是一个**全局独占的「临时焦点」**，
-上一个气泡没归还就再弹会抛 `Attempted to take ephemeral focus when it's already held`。
-界面上完全看不出，只在控制台留一行 —— 所以 `_reportValue()` 每次弹之前都先自己收一次，
-并且 `hideValueBox()` 刻意**不拿 `isVisible()` 做前置判断**：它的「可见」状态和
-「焦点有没有归还」不是一回事。`npm test`/`npm run smoke` 之外还有 `npm run bubble`
-专门核对这套（含「反复点同一块」）。
-
-拖拽不会误触发：判定的是「同一块积木 + 指针几乎没移动」。
-
-没在运行时点积木，会**自动先按一次「运行」**再执行这段 —— 引擎的脚本是帧循环驱动的，
-「等待」「一直重复」都要循环活着才成立，所以不能只跑一段孤立的同步代码。
-
-执行走的是运行时同一套线程模型（`rt.runStack`），所以手动跑的脚本照样能被「停止全部」停掉，
-同一实体重复点也会先掐掉上一轮，不会越点越多。
-
-> 实现上没有用 Blockly 的 CLICK 事件：那个事件依赖 Blockly 的手势栈，
-> 只对特定来源的指针事件有反应，自动化测试里用合成事件点它完全不触发，
-> 等于这条功能没法验证。改成自己在容器上判 pointerdown/pointerup（见 `_installClickToRun`），
-> 行为可预期、可测。
-
-### 7. 键盘输入：真的接上了
-
-运行时靠 `input.keys`（键名用 `KeyboardEvent.code`：`Space` / `ArrowRight` / `KeyW`）。
-这一层在 `src/input/keys.js`，职责有两半：
-
-**送进去** —— `keydown`/`keyup` → `rt.setKey(code, down)`。
-`code` 不一定有值（内嵌 webview、某些输入法状态、自动化合成事件都会只给 `key`），
-所以按 `key` 兜一份，别让按键静默丢掉。
-
-**挡下来** —— 这两类默认行为必须掐掉，否则根本没法玩：
-
-| 默认行为 | 不处理的后果 |
-|---|---|
-| 空格「激活」当前聚焦的按钮 | 点过「运行」之后焦点留在那个按钮上，按空格＝又点一次 → 运行/停止来回跳 |
-| 空格 / 方向键滚动页面 | 玩的时候画面乱滚 |
-
-另外三处细节：
-
-- **按钮不再抢焦点**：容器上拦 `mousedown` 的默认行为（点击照常触发）。对话框没有输入框时，
-  用编程方式把焦点给确认按钮，回车确认这条路不会断。
-- **输入时完全不介入**：焦点在输入框 / Blockly 字段编辑器里就放过；Blockly 的下拉字段和
-  打开的对话框也放过 —— 但**必须判断「真的显示着」**，因为这两个层是常驻 DOM，
-  只判断「存不存在」的话游戏永远拿不到键盘（这个坑真踩过）。
-- **松开所有键**：窗口失焦、焦点进输入框、停止运行时都清空，否则
-  「按住方向键时切走窗口」会让角色一直往那边跑。
-
-> 之前**根本没有这条绑定**。测试里是直接改 `input.keys`，所以一直没暴露 ——
-> 真机上按什么键都进不到运行时。现在 `npm run smoke` 里有一条用真实键盘事件的断言守着。
-
-### 8. 全屏游玩
-
-点顶部 `⛶ 全屏` 或按 **F11**。分两层：
-
-1. **编辑器被舞台整个盖住**（`.fullscreen-layer`，一块独立的画布）；
-2. **窗口真的占满屏幕**，连标题栏一起去掉 —— 这个只能主进程做，
-   走 IPC `tl:set-fullscreen`（`ipc.cjs`）。
-
-进来时如果还没在运行，会顺带按一次「运行」—— 全屏就是「开始玩」的意思。
-`Esc` 或「✕ 退出」返回编辑器（对话框开着时 Esc 先关对话框）。
-
-全屏画布复用的是同一个 `StageView`，只是关掉了网格 / 边框 / 变量监视 /
-「未运行」角标（`{ showChrome: false }`）；HUD 会按画布高度放大，否则整屏上那 15px 的字看不见。
-舞台按 `k = min(cw/W, ch/H)` 缩放居中，比例不一致时自然留黑边。
-
-### 9. 独立运行窗口
-
-点顶部 **⧉ 新窗口**（或 **F6**），游戏在一个**单独的窗口**里跑起来 ——
-可以拖到另一个显示器，编辑器那边继续改。再点一次按钮（或直接关窗）收起。
-
-```
-编辑器（renderer A）          运行窗口（renderer B）
-   store.project  ──IPC──►  main 里的 playerProject  ──►  另一份 Runtime + StageView
-```
-
-**为什么是另一份 Runtime**：跨进程没法共享运行中的状态（实体、变量、线程）。
-所以那个窗口是独立仿真，项目数据由主进程转交 —— 开窗时给一次，
-之后编辑器每次改动再推一次，**所以它同时也是热重载**：改完积木那边立刻生效（保持运行）。
-
-几个刻意的决定：
-
-- **开窗时把编辑器这边的运行停掉。** 否则同一个项目会有两份各自演化的状态
-  （两个分数、两条命），看着像 bug。要预览就再按 ▶，那是你自己的选择。
-- **窗口大小按舞台比例算**，并夹进工作区里，所以不会开出一个别扭的细长窗口。
-- **画家复用同一个 `StageView`**，只是关掉了网格 / 边框 / 变量监视 / 「未运行」角标。
-- 工具条（重来 / 暂停 / 全屏 / 关闭）平时半透明，鼠标移上去才亮；`Esc` 也能关窗。
-- 键盘走和编辑器同一个输入层，所以窗口开着就能玩。
-
-> 窗口是主进程建的，`tanloom://app/player.html` 走的是同一个自定义协议；
-> 跨进程这条链路用 `tools/probe-player.cjs` 端到端验（开窗 / 在跑 / 键盘驱动角色 /
-> 热重载 / 关窗后按钮复位），因为**只看截图看不出对错**。
-
-### 10. 新建分类与新建积木
-
-两条路径都在选择区里，不用绕。
-
-**新建分类**：积木视图左上角 `＋ 分类` → 填名称 / 颜色 / 图标 / 排序 / 可见性。
-新分类会立刻出现在左侧选择区（**空分类也会出现**，并带一句引导告诉你下一步怎么走）。
-改颜色、重命名、删除在 **资源视图 → 积木分类** 里。
-
-**新建积木**有两种入口：
-
-| 入口 | 用途 |
-|---|---|
-| 在画布上选中一段积木 → 右键 → **合成新积木…** | 把现有积木封装成新积木，自动识别自由变量并提升为参数 |
-| 选择区某个分类里的 **`＋ 新建积木`** | 从零造一块，实现先放一个可编辑的「代码积木」占位，就地改 |
-
-两种都会问：名称、显示形式、类型（表达式 / 语句 / 事件）、**归到哪个分类**、颜色、图标、
-作用域、代码生成策略（内联展开 / 函数调用 / 原生映射）。
-
-保存后：注册成积木类型 → 进选择区对应分类 → 调用点被替换（封装路径）
-或自动落到画布上（从零新建路径）。改定义、删除在 **资源视图 → 合成积木** 里。
-
-> 选择区用的是 scratch-blocks 的**连续工具箱**：所有分类共用一个飞出面板，
-> 点分类是「滚到那一段」。它的 `refreshSelection()` 被官方改成了空操作，
-> 所以刷新工具箱之后必须显式 `forceRerender()`，不然新建的分类和积木不会出现 ——
-> 这一点在 `workspace.js` 里有注释，`npm run smoke` 有断言守着。
+6 themes (plus follow-system), an accent colour (8 presets or any colour from the picker, with the label colour
+chosen automatically by brightness), and separate fonts and sizes for the interface and for code — compiled
+into one `:root` variable block with a live preview. Appearance is stored per machine and **never written into
+the project file**: the same game can be skinned differently on every machine. A share code passes a whole look
+on to someone else.
 
 ---
 
-### 11. 编辑器外观（主题色 / 重点色 / 字体 / 字号）
+## Language
 
-顶栏 **`◐ 外观`**（快捷键 **Ctrl+,**）打开设置：
+Three interface languages — **English (default and fallback)** · 简体中文 · 繁體中文 — under
+**◐ Appearance → Interface language**. Everything is covered: panels, dialogs, help, the text on custom blocks,
+and the text of the native Scratch blocks (scratch-blocks ships 79 locales; we point
+`Blockly.ScratchMsgs.setLocale` at the matching one).
 
-| 一栏 | 能调什么 |
+Three decisions worth knowing:
+
+| Decision | Why |
 |---|---|
-| 主题 | **6 套配色**（夜幕·蓝 / 午夜·墨 / Monokai / Nord·极地 / 晨曦·白 / Solarized·纸）+ 一张 **跟随系统** |
-| 重点色 | 8 个预设 + **「跟随主题」** + **取色器**（任意色；字色按亮度自动选深/浅） |
-| 字体与字号 | 界面 / 代码的**字体各 3 档**（非衬线 / 衬线 / 等宽）、**字号各 4 档**（小 / 标准 / 大 / 特大），两者互不牵连 |
-| 分享码 | 把整套外观导出成一段 JSON 发给别人，粘回来点「应用」就套上 |
+| **English is the default and the fallback** | A missing translation falls back to English, not to Chinese — an open-source project's default reader is an English reader |
+| **Dictionary keys are the Simplified Chinese source text** | No invented key names to drift out of sync with the string in the UI; a missing translation is caught by `npm run i18n` |
+| **Switching language reloads the window** | Same as Scratch. Block text comes from three places (the custom block table, the built-in block locale, every panel's DOM); rebuilding once cannot miss one |
 
-改完立即生效，对话框里带实时预览（预览用的就是代码编辑器自己的高亮函数和样式类，不是另画一套）。
+Values do **not** change with the language: dropdown values (`space`, `x`, `frame_start`), variable names,
+broadcast names and the sample project's entity and variable names all stay as they are, so the same `.tle`
+generates identical code in every language. Only display names move.
 
-**跟随系统**不是一套配色，而是一个模式：系统的深浅色一变，编辑器跟着变（`matchMedia('(prefers-color-scheme: dark)')`），
-而且**你手选的那套主题不会被丢掉** —— 关掉跟随后回到它，对话框里用虚线框标出「现在实际生效的是哪套」。
+`npm run i18n` guards the whole thing (pure Node, seconds):
 
-做法是**编译成一份 `:root` 变量覆盖**，追加在 `<head>` 末尾：
+- **nothing untranslated** — every Chinese string in an interface source file is either wrapped in `t()` and
+  present in the dictionary, or on the "this is data" allow-list. The nastiest bug class is *present in the
+  dictionary but never wrapped* — it shows Chinese in the English UI, and this assertion exists to catch it;
+- **dictionaries complete** — 439 keys × 2 languages (Simplified Chinese *is* the key); one missing and it fails;
+- **placeholders match** — the number of `{x}` / `%1` markers in a key and in each translation must agree;
+- **dropdowns covered** — every value of every dropdown list resolves in `i18n-options.js`;
+- **help dialog present in all three languages**.
 
-```
-appearance.js  ──编译──→  <style id="tl-appearance">:root{ --panel: …; --ui: …; --ui-scale: …; }
-```
-
-- 和 `base.css` 的 `:root` **同特异性、后出现者胜**，所以不用 `!important`，也不用挨个改元素。
-- 三个视图都读同一组变量，**一处生效、全屏跟随**，各视图不需要各自响应主题变化。
-- 样式表里不再写死颜色，也不再写死字号。颜色要加深变淡用
-  `color-mix(in srgb, var(--accent) 18%, transparent)` 派生；字号一律写
-  `calc(13px * var(--ui-scale))`（代码区用 `--code-scale`）—— 这样「档位」只改一个数，
-  不用碰任何一条规则，加新样式时照设计稿基准写就行。
-
-四条刻意的边界：
-
-| 边界 | 为什么 |
-|---|---|
-| **不写进项目文件**（只存 localStorage，`tl.appearance.v1`） | 换台机器打开同一个游戏，存档还是存档，皮肤各随各的 |
-| **积木颜色不跟主题** | 那是 Scratch 官方分类色，`theme.js` 里是定值 —— 要和 Scratch 长得一样 |
-| **全屏层 / 独立运行窗口保持深色** | 那是游戏画面，不是编辑器界面（`fullscreen.css` 连字号都不跟） |
-| **自定义重点色必须自动配字色** | 挑到浅黄、浅绿时白字会看不见，所以 `--on-accent` 按 BT.601 亮度算 |
-
-两个实现上的坑，都写在 `appearance.js` 注释里：
-
-- `boot()` 之前就 `new Appearance()` 应用一次，避免先闪一下默认皮肤再变。
-- 对话框关窗必须**退订**（`showModal` 的 `onClose`），不然反复开关会攒下一堆失效的同步回调。
-- 取色器拖动时事件很密，中间态**不落盘**（`set(..., { persist:false })`），松手才写
-  —— 但「值没变」那一拍也要补一次落盘，否则只调过取色器就收手的人，颜色下次打开会丢。
-
-`npm run theme` 断言的是 `getComputedStyle` 的**计算值**（`--panel`、`body` 的 `font-family`、
-`font-size` 实际算出来多少 px），不是「记得调过哪个方法」—— 变量写进了 `<style>` 却被 `base.css`
-盖住，是这条线最容易出的错，光看内部 state 发现不了。它同时验持久化（重载后恢复完整状态）、
-退订账本、「换主题不动项目数据」、以及**跟随系统是真的实时**（由主进程改 `nativeTheme.themeSource`
-去驱动，页面全程不参与）。
-
-> 「跟随系统」这条不好测在「点一下」上：它真正的价值是**实时**。所以探针里由主进程改系统偏好，
-> 页面什么都不做 —— 变不过来就是没生效。
+Files: `core/i18n.js` (the engine: detection, `t()`, `opt()`, `setLang()`), `i18n-ui.js`, `i18n-shell.js`,
+`i18n-blocks.js`, `i18n-msg.js`, `i18n-tpl.js` (messages with slots), `i18n-options.js` (dropdown labels keyed
+by value id), `i18n-help.js` (the help text, per language).
 
 ---
 
-## 目录
+## Layout
 
 ```
 tanloom-engine/
-├── main.cjs                  Electron 主进程（窗口 + 菜单）
-├── ipc.cjs                   主进程 IPC：独立运行窗口 / 全屏 / 打开 / 保存 / 导出代码
-├── app-protocol.cjs          tanloom:// 自定义协议（见下方「离线说明」）
-├── preload.cjs               contextBridge 桥接
+├── main.cjs                  Electron main process (windows + menu)
+├── ipc.cjs                   IPC: player window / fullscreen / open / save / export
+├── app-protocol.cjs          the tanloom:// custom protocol
+├── preload.cjs               contextBridge
 ├── src/
-│   ├── index.html
-│   ├── app.js                装配：把 IR / 运行时 / 三个视图拼起来
-│   ├── player.html           独立运行窗口（只有一个舞台 + 一条工具条）
-│   ├── player.js             独立窗口的运行时装配 + 热重载
-│   ├── core/
-│   │   ├── ir.js             IR 节点、工厂、校验（唯一真源）
-│   │   ├── blockdefs.js      98 块积木：形状 + 代码生成 + 运行时行为
-│   │   ├── registry.js       内置分类、广播频道、下拉选项
-│   │   ├── codegen.js        IR → TypeScript
-│   │   ├── parser.js         TypeScript → IR（含降级策略）
-│   │   ├── store.js          状态中心 + 撤销重做 + 同步
-│   │   └── template.js       内置示例项目
-│   ├── input/
-│   │   └── keys.js           真实键盘 → 运行时的 input.keys；挡掉会毁掉游玩的默认行为
-│   ├── vendor/
-│   │   └── scratch-blocks.js 渲染器入口（转发到 node_modules）
-│   ├── blocks/scratch/
-│   │   ├── defs.js           IR ↔ 积木 映射表（注册 / 正向 / 反向 三合一）
-│   │   ├── sync.js           IR ↔ 积木 XML
-│   │   ├── theme.js          分类配色 → Blockly 主题
-│   │   ├── toolbox.js        选择区（从 blockdefs 自动生成；空分类也保留）
-│   │   └── workspace.js      工作区宿主 + 写回 IR + 右键菜单 + 新建积木
-│   ├── runtime/vm.js         广播总线 + 帧循环 + 标准库
-│   ├── code/editor.js        高亮 + 注解 + 冲突处理
-│   ├── scene/viewport.js     Canvas 2D 舞台
-│   └── ui/                   面板、对话框、外观（主题色 / 字体 → :root 变量覆盖）
-└── tools/                    启动器、自测、冒烟测试、积木总览、定义探针、外观探针
+│   ├── core/                 IR, block definitions, code generation, parsing, store, i18n
+│   ├── blocks/scratch/       block ↔ XML ↔ IR mapping, renderer theme, palette, workspace
+│   ├── runtime/              the VM: frame loop, broadcast bus, physics, clones, assets
+│   ├── scene/                viewport (stage, gizmos, picking)
+│   ├── code/                 code editor with highlighting
+│   ├── ui/                   panels, dialogs
+│   └── styles/               design tokens and layout
+└── tools/                    launcher, self-tests, smoke test, block gallery, probes
 ```
 
 ---
 
-## 本机环境的两个坑（已在代码里绕开）
+## Testing
 
-这台机器上没法访问 npm registry，所以 Electron 是**离线内置**的：把
-`electron-v44.5.1-win32-x64.zip` 解压到 `node_modules/electron/dist/`。
-由此引出两个必须注意的点：
+Seven suites, each with a different job — and each one exists because something got past the others.
 
-1. **`node_modules/electron/` 里不能有 `index.js` / `package.json`。**
-   有的话 `require('electron')` 会解析到那个本地包，而不是 Electron 的内置模块，
-   主进程直接拿不到 `app`。所以入口统一走 `tools/electron.cjs`。
-
-2. **环境变量 `ELECTRON_RUN_AS_NODE=1` 必须删掉**（不是置空）。
-   带着它 `electron.exe` 会退化成普通 Node 进程。启动器已经处理。
-
-另外：静态资源走 **`tanloom://` 自定义协议**由主进程直接读盘返回，不起本地 HTTP 服务。
-原因是本机存在 `http_proxy` 环境变量，Chromium 会把 `127.0.0.1` 也丢给代理，导致
-`ERR_CONNECTION_TIMED_OUT`。自定义协议不经过网络栈，端口、代理、防火墙都影响不到它。
-
-协议有两个 host：
-
-| host | 指向 | 用途 |
+| Suite | Items | Why it is separate |
 |---|---|---|
-| `tanloom://app/` | `src/` | 编辑器本体 |
-| `tanloom://bundle/` | 工程根目录 | `node_modules/scratch-blocks`（渲染器 + media） |
+| `npm test` | 92 + 5 | Pure Node, seconds. Definition-table self-checks, every block round trip, i18n |
+| `npm run audit` | 162 | Every block × every dropdown value, node for node — the thorough version of the same idea |
+| `npm run smoke` | 53 | Real Electron, zero console errors, screenshots. Catches "works in Node, breaks in the renderer" |
+| `npm run ui` | 11 | Real clicks, real forms, real right-click — the flows a user actually performs |
+| `npm run bubble` | 21 | The value bubble: official colours, arrow, positioning, and that clicking label text still evaluates |
+| `npm run player` | 18 | Cross-process: opens the player window and reads its internal state from the test |
+| `npm run theme` | 38 | Asserts **computed styles**, not "we called the setter" |
 
-因为两者不同源，`index.html` 的 CSP 里显式放行了 `tanloom://bundle`
-（否则渲染器会被 CSP 拦掉，积木整个不出来）。
+Two habits that came out of real bugs:
 
-3. **scratch-blocks 是离线放进来的**：本机访问不了 registry，所以
-   `node_modules/scratch-blocks` 是从兄弟工程复制过来的（只取 `dist/main.mjs` + `media` + `msg`，
-   约 2.3MB）。它自带中文语言包，`dist/main.mjs` 是完整打包产物，没有外部依赖。
-
----
-
-## 测试
-
-```bash
-npm test        # 92 项核心自测
-```
-
-覆盖：
-- 积木定义表自检（id 唯一、label 插槽与参数一一对应、gen/run 齐全）
-- **积木引用的运行时方法必须真实存在**（靠这条抓出过 `c.rt.keyDown` 拼错）
-- **每个积木节点的字段必须和定义表对得上**（抓出过 `E.join` 用 `left/right` 而定义读 `a/b`）
-- 模板项目 IR 校验
-- `IR → 代码` 生成，以及 `代码 → IR` 的往返一致性
-- 未知写法降级为代码积木后的无损往返
-- **每个积木逐个「代码 ↔ 积木」往返**（98 块 × 162 组取值：字段值 / 子表达式 / 语句条数）
-- **舞台点击**（点角色触发「当被点击」、判定框跟着「大小」缩放、只触发命中的那一个）
-
-```bash
-npm run audit   # 同一套往返逻辑的明细版：列出走不通的积木 + 复现用的生成代码
-```
-
-```bash
-npm run smoke   # 52 项，真机 Electron
-```
-
-覆盖：渲染器身份与官方度量、**IR → 积木 → IR 往返零丢失**（含字段）、
-**圆形 / 六边形积木的取值气泡（官方外观 + 落在积木下方 + 点空白收起 + 反复点不报错）**、
-**订阅状态积木注册进渲染器（两个下拉都在）**、选择区分类、
-**新建分类 → 出现在选择区**、**从零新建积木 → 进选择区 + 落到画布**、
-**点击语句积木执行 / 拖动不误触发**、**真实键盘进得了运行时**、
-**焦点在按钮上按空格不误触**、**方向键不滚页面**、**全屏铺满 + 全屏下真的能走能跳 + Esc 退出**、
-**示例项目没被测试改坏**、代码生成与注解、视图切换、重力/碰撞/输入、
-广播派发、合成积木调用与调用点替换、「停止全部」的绿旗语义，
-并输出 7 张截图到 `tools/shots/`。
-
-```bash
-npm run ui       # 11 项界面流程测试（真点按钮、真填表单、真右键）
-npm run bubble   # 17 项取值气泡核对（官方配色 / 箭头 / 定位 / 选择区 / 反复点）
-npm run theme    # 38 项外观核对（主题 / 重点色 / 字体字号 / 跟随系统 / 分享码 / 持久化 / 退订）
-```
-
-它比冒烟测试更贴近用户：点 `＋ 分类` → 填表单提交 → 检查选择区多出一行；
-右键积木 → 检查菜单里有「合成新积木…」；点选择区里的 `＋ 新建积木` → 从零造一块。
-出图 `tools/shots/06-new-block.png`、`07-category-manager.png`。
-
-`npm run theme` 走的是「点 `◐ 外观` → 点主题卡 → 点色点 → 拖取色器 → 改下拉 → 点分享码按钮」，
-但断言全部落在 `getComputedStyle` 的**计算值**上（`--panel`、`--on-accent`、
-`body` 的 `font-family`、`font-size` 实际算出多少 px……），
-所以「变量写进 `<style>` 了但被 `base.css` 盖住」这类静默失效会被抓住。
-出图 `tools/shots/12`~`16`（对话框全景 / 浅色整屏 / 等宽代码视图 / 对话框下半段 / 界面字号特大）。
-
-```bash
-npm run gallery  # 98 块积木全渲染 → tools/shots/blocks-gallery.png
-# 想单独核对某一块：传它的 op 名，会额外裁一张出来
-node tools/electron.cjs tools/gallery.cjs SetSubscribed   # → tools/shots/block-SetSubscribed.png
-```
-
-**这三条检查是刻意加的**，因为过程中它们各自抓到过一类只能靠比对发现的静默错误：
-
-| 检查 | 抓出过的问题 |
-|---|---|
-| 往返比对 | 反向构造时参数按 IR 字段名传、`make` 却读积木参数名 → 节点「类型对、字段全 undefined」 |
-| 官方度量断言 | 自绘几何与 Scratch 实测值差 12px（栈块 44 vs 56、圆形 32 vs 40） |
-| 界面流程测试 | 空分类被选择区跳过、合成积木对话框因 TDZ 直接崩溃、新建的积木放上去立刻被清掉 |
-| 运行时方法存在性 | 积木里调了不存在的运行时接口，静默失效 |
-| 像素级验证 | `capturePage` 的第一张常是上一帧 —— 曾据此误判「气泡没画出来」，其实是截图问题 |
-| 隐藏窗口截图 | 同一招在「整页换肤」上不够用：隐藏窗口 + 大范围重绘时，抓一次可能还是**几秒前**那一帧。`probe-theme` 改成连抓三拍、每拍之间留 420ms 取最后一拍 |
-| 跨进程端到端 | 独立运行窗口跨两个 renderer，截图看不出对错；`npm run player` 直接读写另一个窗口的内部状态来断言 |
-| 独占资源账本 | Blockly 的 DropDownDiv 用全局独占的「临时焦点」，漏还一次后续弹出就会抛错且界面上看不出来。给 `takeEphemeralFocus` 插桩记「拿几次/还几次」，一眼定位 |
-| 项目基线签名 | 一条冒烟断言用 `dispose(false)` 收尾，把积木链从中间断开，写回 IR 时玩家脚本的 `update` 主体变成空的；症状飘到几十条断言之后，全都在说「角色不动」。现在用前后签名比对把这类污染直接钉在原地 |
-| **逐个积木往返审计** | 「重复 N 次」回不来（parser 不认后缀 `++`，整块降级成「执行代码」）· 7 块列表积木（`lists.x.push / splice / .length` 没有反向解析）· 「移动 (dx)(dy)」生成成两条语句，回来变成两块「将 x 坐标增加」· 颜色字段被塞进一个表达式节点（积木上的色块显示成 `[object Object]`）· 「别的实体」上的增加坐标 / 旋转 / 换动画 / 换颜色全都变成通用的「把属性设为」——形状对不上 |
-| **判定框口径** | `clickAt()` 读 `A.t` / `A.b`，而 `aabb()` 给的是 `bottom` / `top` → 两个都是 `undefined`，比较恒为 false：**点舞台上任何角色都不会触发「当被点击」**，而且不报错不警告；另外 `aabb()` 没算「大小」，而绘制和编辑器拾取都算 → 放大到 200% 的角色「看着碰上了却穿过去、点它点不中」 |
-| **点积木上的文字** | `isFieldAt()` 拿 `.blocklyFieldText` 判「点在字段上」，可这个类连纯标签（「让」「说」「秒」）都有 → 圆形积木的大半面积点下去被当成字段交互跳过。用户报的「有时有效、有时无效」就是它 |
+- **Assert on the computed value, not on the call.** Theme changes, font sizes and dropdown labels are checked
+  with `getComputedStyle`, because "the variable was written" and "the variable won" are different facts.
+- **Screenshots lie about timing.** `capturePage()` often returns the previous frame; the probes take three and
+  keep the last. One misleading screenshot nearly "proved" a theme had not applied, when the pixel samples said
+  otherwise.
 
 ---
 
-## 当前实现范围与已知取舍
+## Current scope and known gaps
 
-**已实现**：98 块积木（含运行时可开关的广播订阅）、广播总线、ECS-lite + AABB 物理、合成积木与自定义分类、
-双向同步与冲突处理、热重载、撤销重做、广播时间轴/订阅列表/变量监视/性能/控制台、
-示例项目、项目存取与代码导出。
+Solid: single-IR editing, the frame/broadcast runtime, physics and collisions, clones, the block and code views,
+composite blocks and categories, appearance, three interface languages, project save/open and code export.
 
-**有意的取舍**：
-- 代码编辑器是「textarea + 高亮」而不是 Monaco（本机无法安装依赖）。
-  换 Monaco 只需替换 `src/code/editor.js`，注解与同步逻辑不用动。
-- 颜色字段用文本框填 `#rrggbb`。`@blockly/field-colour` 是独立插件且只出 CJS、
-  要外挂一份 blockly，为一个小字段不值得。
-- 撤销统一由 store 负责（`ws.clearUndo()`），Blockly 自己的撤销栈不使用。
-- 取值气泡**不自己画**，直接用 scratch-blocks 的 `Blockly.reportValue`（见「点击积木就能执行」）。
-  自己画 div 试过，位置/箭头/贴边翻转都要重做，而且不像。
-- 舞台用 Canvas 2D 画内置矢量形状，没有接 PixiJS/Three.js。
-- 反向解析只覆盖 codegen 产出的受限子集；其他写法降级为代码积木。
-- 浮动积木组（没接进脚本的孤立积木）保存在 `entity.scratch`，不参与运行。
+Known gaps, stated plainly:
 
-**下一步**：3D 视口与资源导入 → 插件系统 → 多人协作 → 积木市场。
+- the runtime API reference comment written into exported `.ts` files (`_runtime.ts`) is still Chinese;
+- the sample project's entity, variable and broadcast names stay Chinese by design — they are identifiers;
+- the block view's selection glow is not drawn: `theme.js` never sets the glow component styles, so
+  `.blocklyPathSelected { filter: var(--blocklySelectedGlowFilter) }` resolves to an empty string;
+- 3D viewport, an asset import pipeline, a plugin system, multiplayer and a block marketplace are not started.
 
-**正在推进的架构方向**见 [`docs/design-unify-bus-and-clones.md`](docs/design-unify-bus-and-clones.md)
-（**设计稿，未实施**）：把「按键 / 碰撞 / 点击 / 生命周期」和「每帧阶段」收敛到同一条广播总线，
-把「原型 / 克隆体」收敛成唯一的实体模型。那份文档里逐条列了现状证据（含 `文件:行号`）、
-要拍板的六个决策、三期落地顺序和每期的验收断言。
+The architecture direction for unifying dispatch is written up in
+[`docs/design-unify-bus-and-clones.md`](docs/design-unify-bus-and-clones.md) (design only, not implemented).
 
-其余待办：圆形 / 六边形积木上那个偶发的橙色选中框（尚未定位）。
+---
+
+## Notes for offline / restricted machines
+
+This was built on a machine that cannot reach the npm registry or `api.github.com` (SSH to
+`ssh.github.com:443` is the only way in). Two consequences are visible in the repo: the `tanloom://` protocol
+exists so resources load without a local HTTP server — the HTTP-server approach had already been broken by
+proxy settings and firewalls — and the probes pin Electron's `userData` to a temporary directory so a stale
+cache cannot influence a run.
+
+---
+
+## License
+
+MIT (see `package.json`). Issues and pull requests are welcome.

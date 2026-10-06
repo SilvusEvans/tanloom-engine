@@ -10,6 +10,7 @@
  * 内置阶段、自定义事件、按键、碰撞、计时器，全部走同一条广播总线。
  */
 
+import { t } from '../core/i18n.js';
 import { BUILTIN_CHANNELS } from '../core/registry.js';
 
 export class ScriptStop extends Error {
@@ -87,7 +88,7 @@ export class Runtime {
       camera: { x: 0, y: 0, target: null, k: 0.12 },
       shake: 0,
       hud: '',
-      scene: project.scene ? project.scene.sceneName : '场景 1',
+      scene: project.scene ? project.scene.sceneName : t('场景 1'),
       monitors: {},
       saves: {}
     };
@@ -132,7 +133,7 @@ export class Runtime {
     this.state.camera = { x: 0, y: 0, target: null, k: 0.12 };
     this.state.shake = 0;
     this.state.hud = '';
-    this.state.scene = p.scene ? p.scene.sceneName : '场景 1';
+    this.state.scene = p.scene ? p.scene.sceneName : t('场景 1');
     this._timerBase = 0;
     this.input.keys.clear(); this.input.pressed.clear();
     this._collisionPairs.clear();
@@ -144,7 +145,7 @@ export class Runtime {
       this.__diag.spawn++;
     }
     this.buildSubscriptions();
-    this.log(`已加载项目「${p.name}」，实体 ${this.state.order.length} 个`, 'info');
+    this.log(t('已加载项目「{_1}」，实体 {_2} 个', { _1: p.name, _2: this.state.order.length }), 'info');
   }
 
   spawnFromDef(def, isClone, over) {
@@ -262,7 +263,7 @@ export class Runtime {
     }
     // 只在状态真的变了才记日志 —— 这个积木常被写在 update 里逐帧调用
     if (changed) {
-      this.log(`📣 ${name} ${wantSub ? '订阅' : '取消订阅'}「${channel}」（${affected} 条脚本）`,
+      this.log(t('📣 {_1} {_2}「{_3}」（{_4} 条脚本）', { _1: name, _2: wantSub ? t('订阅') : t('取消订阅'), _3: channel, _4: affected }),
         wantSub ? 'ok' : 'warn');
     }
     return affected;
@@ -293,8 +294,8 @@ export class Runtime {
     this.paused = false;
     this.budget = Runtime.BUDGET;   // 派发 _start 前必须给足本帧预算
     this._lastTs = 0;
-    this.log('▶ 运行', 'ok');
-    this.log('广播 [start]', 'bus');
+    this.log(t('▶ 运行'), 'ok');
+    this.log(t('广播 [start]'), 'bus');
     this._dispatch('_start', 0);
     // start 里的脚本允许跑一帧再进入循环
     this._raf = requestAnimationFrame((t) => this._tick(t));
@@ -316,8 +317,8 @@ export class Runtime {
     this.clearKeys();
   }
 
-  pause() { this.paused = true; this.log('⏸ 暂停', 'warn'); }
-  resume() { if (this.running) { this.paused = false; this._lastTs = 0; this.log('▶ 继续', 'ok'); } }
+  pause() { this.paused = true; this.log(t('⏸ 暂停'), 'warn'); }
+  resume() { if (this.running) { this.paused = false; this._lastTs = 0; this.log(t('▶ 继续'), 'ok'); } }
   isRunning() { return this.running && !this.paused; }
 
   _tick(ts) {
@@ -519,8 +520,8 @@ export class Runtime {
    */
   runStack(entityName, hat, body) {
     const self = this.state.entities[entityName];
-    if (!self || !self.alive) return { ok: false, reason: `找不到实体「${entityName}」` };
-    if (!this.running) return { ok: false, reason: '引擎还没运行' };
+    if (!self || !self.alive) return { ok: false, reason: t('找不到实体「{entityName}」', { entityName }) };
+    if (!this.running) return { ok: false, reason: t('引擎还没运行') };
     // 「停止全部」之后手动点积木，应该允许重新跑起来
     this.halted = false;
     // 同一实体重复点：先掐掉上一轮，免得「一直重复」越点越多
@@ -572,7 +573,7 @@ export class Runtime {
       if (thread.state !== 'running') throw new ScriptStop('thread-' + thread.state);
       if (thread.cancel) throw new ScriptStop('cancel');
       if (--this.budget <= 0) {
-        this.log('⚠ 单帧执行预算耗尽（可能存在无 yield 的死循环），已中断脚本', 'warn');
+        this.log(t('⚠ 单帧执行预算耗尽（可能存在无 yield 的死循环），已中断脚本'), 'warn');
         throw new ScriptStop('budget');
       }
       const def = this._defCache(b);
@@ -703,14 +704,14 @@ export class Runtime {
   _ensureChannel(name) {
     if (!this.project.channels) this.project.channels = {};
     if (!this.project.channels[name] && !PHASE_CHANNELS.has(name)) {
-      this.project.channels[name] = { name, builtin: false, order: 100, doc: '由积木自动注册' };
+      this.project.channels[name] = { name, builtin: false, order: 100, doc: t('由积木自动注册') };
       if (!this._subByChannel[name]) this._subByChannel[name] = [];
       if (this.hooks.onChannelsChanged) this.hooks.onChannelsChanged(name);
     }
   }
 
   logEvent(channel, value, source, count) {
-    const entry = { channel, value, source: source ? source.name : '系统', count, frame: this.frame };
+    const entry = { channel, value, source: source ? source.name : t('系统'), count, frame: this.frame };
     this.broadcastLog.push(entry);
     if (this.broadcastLog.length > 200) this.broadcastLog.shift();
     if (this.hooks.onBroadcast) this.hooks.onBroadcast(entry);
@@ -848,7 +849,7 @@ export class Runtime {
 
   clone(ent) {
     if (!ent || !ent.irDef) return;
-    if (this.state.order.length > 400) { this.log('克隆体数量已达上限（400）', 'warn'); return; }
+    if (this.state.order.length > 400) { this.log(t('克隆体数量已达上限（400）'), 'warn'); return; }
     const c = this.spawnFromDef(ent.irDef, true, { x: ent.x, y: ent.y, dir: ent.dir, size: ent.size, opacity: ent.opacity });
     this.state.clones.push(c.name);
     const subs = this.subscribersOf('_clone').filter((s) => s.entityName === ent.protoName);
@@ -859,7 +860,7 @@ export class Runtime {
       const done = () => { t.state = 'done'; delete this._subscriptions[t.id]; };
       const bad = (e) => {
         t.state = e instanceof ScriptStop ? 'stopped' : 'error';
-        if (!(e instanceof ScriptStop)) this.log(`✖ 克隆体 / ${s.entityName}: ${e.message}`, 'error');
+        if (!(e instanceof ScriptStop)) this.log(t('✖ 克隆体 / {_1}: {_2}', { _1: s.entityName, _2: e.message }), 'error');
         delete this._subscriptions[t.id];
       };
       try {
@@ -884,7 +885,7 @@ export class Runtime {
 
   spawn(name, x, y) {
     const def = (this.project.entities || []).find((d) => d.name === name || d.id === name);
-    if (!def) { this.log(`找不到实体「${name}」`, 'warn'); return null; }
+    if (!def) { this.log(t('找不到实体「{name}」', { name }), 'warn'); return null; }
     const e = this.spawnFromDef(def, false);
     e.x = x; e.y = y;
     return e;
@@ -913,7 +914,7 @@ export class Runtime {
         for (const s of this._subByChannel[ch]) s.thread = null;
       }
       this.halted = true;
-      this.log('⏹ 停止全部脚本（点 ▶ 重新开始）', 'warn');
+      this.log(t('⏹ 停止全部脚本（点 ▶ 重新开始）'), 'warn');
       if (this.hooks.onHalt) this.hooks.onHalt();
       return;
     }
@@ -992,7 +993,7 @@ export class Runtime {
   switchScene(name) {
     const from = this.state.scene;
     this.state.scene = name;
-    this.log(`场景切换 ${from} → ${name}`, 'info');
+    this.log(t('场景切换 {from} → {name}', { from, name }), 'info');
   }
   saveSlot(slot) {
     const data = { vars: this.state.vars, lists: this.state.lists, scene: this.state.scene, entities: {} };
@@ -1003,12 +1004,12 @@ export class Runtime {
     }
     this.state.saves[slot] = data;
     try { localStorage.setItem('tanloom.save.' + slot, JSON.stringify(data)); } catch { /* ignore */ }
-    this.log(`💾 存档到「${slot}」`, 'ok');
+    this.log(t('💾 存档到「{slot}」', { slot }), 'ok');
   }
   loadSlot(slot) {
     let data = this.state.saves[slot];
     if (!data) { try { data = JSON.parse(localStorage.getItem('tanloom.save.' + slot)); } catch { /* ignore */ } }
-    if (!data) { this.log(`存档「${slot}」不存在`, 'warn'); return; }
+    if (!data) { this.log(t('存档「{slot}」不存在', { slot }), 'warn'); return; }
     this.state.vars = Object.assign(this.state.vars, data.vars || {});
     this.state.lists = Object.assign(this.state.lists, data.lists || {});
     this.state.scene = data.scene || this.state.scene;
@@ -1016,7 +1017,7 @@ export class Runtime {
       const e = this.state.entities[n];
       if (e) Object.assign(e, s);
     }
-    this.log(`📂 读取存档「${slot}」`, 'ok');
+    this.log(t('📂 读取存档「{slot}」', { slot }), 'ok');
   }
 
   /* ---------------------------------------------------------------- */
@@ -1074,7 +1075,7 @@ export class Runtime {
       const fn = new Function('ctx', 'self', 'vars', 'lists', 'tl', 'frame', 'delta', body);
       return fn(ctx, ctx.self, this.state.vars, this.state.lists, this.apiFor(ctx), this.frame, this.delta);
     } catch (err) {
-      this.log(`代码积木错误：${err.message}`, 'error');
+      this.log(t('代码积木错误：{_1}', { _1: err.message }), 'error');
       return 0;
     }
   }
@@ -1178,7 +1179,7 @@ Runtime._defsModule = null;
 const MACRO_RUNNER = {
   run(node, ctx) {
     const macro = ctx.rt.project.macros && ctx.rt.project.macros[node.macroId];
-    if (!macro) { ctx.log(`缺失的积木宏：${node.macroId}`, 'warn'); return 0; }
+    if (!macro) { ctx.log(t('缺失的积木宏：{_1}', { _1: node.macroId }), 'warn'); return 0; }
     const depth = (ctx.thread.macroDepth = (ctx.thread.macroDepth || 0) + 1);
     if (depth > 32) { ctx.thread.macroDepth--; throw new ScriptStop('macro-depth'); }
     try {

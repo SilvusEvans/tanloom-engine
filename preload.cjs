@@ -4,6 +4,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('tanloom', {
   isElectron: true,
   platform: process.platform,
+  // 系统语言（主进程的 app.getSystemLocale()）。Electron 的 navigator.language
+  // 在没设 --lang 时固定是 en-US，中文系统上会误判成英语，所以界面语言优先用这个。
+  systemLocale: (() => { try { return ipcRenderer.sendSync('tl:system-locale'); } catch { return ''; } })(),
   openProject: () => ipcRenderer.invoke('tl:open-project'),
   saveProject: (payload) => ipcRenderer.invoke('tl:save-project', payload),
   exportCode: (payload) => ipcRenderer.invoke('tl:export-code', payload),

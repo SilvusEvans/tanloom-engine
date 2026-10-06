@@ -10,6 +10,7 @@
  *   6. 保存 → 自动注册 → 选择区出现
  */
 
+import { t } from '../core/i18n.js';
 import { uid, seq, cloneIR, E } from '../core/ir.js';
 import { showModal, row, inputEl, selectEl, radioRow, getRadio, hint, toast } from './dialogs.js';
 import { defOf, macroDefOf } from '../core/blockdefs.js';
@@ -65,9 +66,9 @@ function placeholderBody(kind) {
     return { type: 'CodeBlock', code: '0', returns: true };
   }
   const head = kind === 'event'
-    ? '// 这段是事件积木的默认动作，改成你要的'
-    : '// 在这里写这个积木做什么';
-  return seq([{ type: 'CodeBlockStatement', code: head + '\n// 例：self.x += 10;' }]);
+    ? t('// 这段是事件积木的默认动作，改成你要的')
+    : t('// 在这里写这个积木做什么');
+  return seq([{ type: 'CodeBlockStatement', code: head + t('\n// 例：self.x += 10;') }]);
 }
 
 /* ================================================================== */
@@ -120,18 +121,18 @@ export function openMacroDialog({ store, macroId, source, onChange }) {
   const wrap = document.createElement('div');
 
   const nameI = inputEl(editing ? macro.name : '');
-  const displayI = inputEl(editing ? macro.display : (isExprBody ? '(x)^2' : '新积木 (x)'));
+  const displayI = inputEl(editing ? macro.display : (isExprBody ? '(x)^2' : t('新积木 (x)')));
   const kind = radioRow('kind', [
-    { value: 'expression', label: '表达式（返回值）' },
-    { value: 'statement', label: '语句（执行动作）' },
-    { value: 'event', label: '事件（组合帽块）' }
+    { value: 'expression', label: t('表达式（返回值）') },
+    { value: 'statement', label: t('语句（执行动作）') },
+    { value: 'event', label: t('事件（组合帽块）') }
   ], kindHint);
   kind.addEventListener('change', () => {
     if (!placeholder) return;
     const k = getRadio(kind);
     if ((k === 'expression') === isExprBody) return;
     bodyIR = placeholderBody(k);
-    toast('实现已经换成对应的占位代码积木，保存后在积木上直接改', 'info', 3200);
+    toast(t('实现已经换成对应的占位代码积木，保存后在积木上直接改'), 'info', 3200);
   });
 
   const catOpts = Object.values(p.categories).sort((a, b) => (a.order || 0) - (b.order || 0))
@@ -144,14 +145,14 @@ export function openMacroDialog({ store, macroId, source, onChange }) {
   const colorI = inputEl(editing ? (macro.color || '#FF6680') : '#FF6680', 'color');
   const iconI = inputEl(editing ? (macro.icon || '🧩') : '🧩');
   const scope = radioRow('scope', [
-    { value: 'entity', label: '仅本角色' },
-    { value: 'project', label: '项目' },
-    { value: 'global', label: '全局' }
+    { value: 'entity', label: t('仅本角色') },
+    { value: 'project', label: t('项目') },
+    { value: 'global', label: t('全局') }
   ], editing ? macro.scope : 'project');
   const cg = radioRow('codegen', [
-    { value: 'inline', label: '内联展开' },
-    { value: 'function', label: '函数调用' },
-    { value: 'native', label: '原生映射' }
+    { value: 'inline', label: t('内联展开') },
+    { value: 'function', label: t('函数调用') },
+    { value: 'native', label: t('原生映射') }
   ], editing ? macro.codegen : (isExprBody ? 'inline' : 'function'));
 
   // 自由变量（字面量提升为参数）
@@ -169,8 +170,8 @@ export function openMacroDialog({ store, macroId, source, onChange }) {
   const updatePreview = () => {
     const chosen = paramRows.filter((r) => r.cb.checked);
     preview.innerHTML = chosen.length
-      ? `参数：<code>${chosen.map((r) => r.nm.value).join(', ')}</code> —— 调用这个积木时，这些槽位会变成可填的输入口。`
-      : '没有提升任何参数：这个积木会把当前的字面量固化下来。';
+      ? t('参数：<code>{_1}</code> —— 调用这个积木时，这些槽位会变成可填的输入口。', { _1: chosen.map((r) => r.nm.value).join(', ') })
+      : t('没有提升任何参数：这个积木会把当前的字面量固化下来。');
   };
 
   lits.forEach((lit, i) => {
@@ -180,7 +181,7 @@ export function openMacroDialog({ store, macroId, source, onChange }) {
     cb.type = 'checkbox';
     cb.checked = isExprBody && lits.length === 1;
     const code = document.createElement('code');
-    code.textContent = `(${lit.value})  →  出现 ${countOccurrences(bodyIR, lit)} 次`;
+    code.textContent = t('({_1})  →  出现 {_2} 次', { _1: lit.value, _2: countOccurrences(bodyIR, lit) });
     const nm = inputEl(PARAM_NAMES[i] || ('p' + i));
     nm.style.width = '80px';
     nm.disabled = true;
@@ -192,26 +193,26 @@ export function openMacroDialog({ store, macroId, source, onChange }) {
   });
   updatePreview();
 
-  wrap.appendChild(row('名称', nameI));
-  wrap.appendChild(row('显示形式', displayI));
-  wrap.appendChild(row('类型', kind));
-  wrap.appendChild(row('分类', catSel));
-  wrap.appendChild(row('颜色', colorI));
-  wrap.appendChild(row('图标', iconI));
-  wrap.appendChild(row('作用域', scope));
-  wrap.appendChild(row('代码生成', cg));
-  wrap.appendChild(hint('<b>自由变量</b>：勾选要提升为参数的槽位（策划案 §7.2 第 3 步）。'));
+  wrap.appendChild(row(t('名称'), nameI));
+  wrap.appendChild(row(t('显示形式'), displayI));
+  wrap.appendChild(row(t('类型'), kind));
+  wrap.appendChild(row(t('分类'), catSel));
+  wrap.appendChild(row(t('颜色'), colorI));
+  wrap.appendChild(row(t('图标'), iconI));
+  wrap.appendChild(row(t('作用域'), scope));
+  wrap.appendChild(row(t('代码生成'), cg));
+  wrap.appendChild(hint(t('<b>自由变量</b>：勾选要提升为参数的槽位（策划案 §7.2 第 3 步）。')));
   wrap.appendChild(paramWrap);
   wrap.appendChild(preview);
-  wrap.appendChild(hint('保存后会立刻注册到选择区对应分类下；调用点可以随时右键「展开」还原成基础积木。'));
+  wrap.appendChild(hint(t('保存后会立刻注册到选择区对应分类下；调用点可以随时右键「展开」还原成基础积木。')));
 
   showModal({
-    title: editing ? `编辑积木「${macro.name}」` : '合成新积木',
+    title: editing ? t('编辑积木「{_1}」', { _1: macro.name }) : t('合成新积木'),
     body: wrap,
-    okText: editing ? '保存修改' : '合成',
+    okText: editing ? t('保存修改') : t('合成'),
     onOk: () => {
       const name = nameI.value.trim();
-      if (!name) { toast('请填写名称', 'warn'); return false; }
+      if (!name) { toast(t('请填写名称'), 'warn'); return false; }
       const chosen = paramRows.filter((r) => r.cb.checked);
       const map = new Map();
       chosen.forEach((r) => map.set(r.lit, r.nm.value.trim() || 'p'));
@@ -235,9 +236,9 @@ export function openMacroDialog({ store, macroId, source, onChange }) {
       };
 
       if (editing) {
-        store.commit(`修改积木「${name}」`, () => { store.project.macros[newMacro.id] = newMacro; });
+        store.commit(t('修改积木「{_1}」', { _1: name }), () => { store.project.macros[newMacro.id] = newMacro; });
       } else {
-        store.commit(`合成新积木「${name}」`, () => {
+        store.commit(t('合成新积木「{_1}」', { _1: name }), () => {
           store.project.macros[newMacro.id] = newMacro;
           if (!store.project.categories[newMacro.category]) {
             store.project.categories[newMacro.category] = {
@@ -250,7 +251,7 @@ export function openMacroDialog({ store, macroId, source, onChange }) {
         if (source && source.onCommit) source.onCommit(newMacro);
       }
       if (onChange) onChange();
-      toast(editing ? '积木定义已更新' : `已合成「${name}」，去选择区看看`, 'ok');
+      toast(editing ? t('积木定义已更新') : t('已合成「{name}」，去选择区看看', { name }), 'ok');
       return true;
     }
   });
@@ -275,35 +276,35 @@ function countOccurrences(root, lit) {
 /* ================================================================== */
 export function openCategoryDialog(store, onChange) {
   const wrap = document.createElement('div');
-  const nameI = inputEl('战斗系统');
+  const nameI = inputEl(t('战斗系统'));
   const colorI = inputEl('#E53935', 'color');
   const iconI = inputEl('⚔');
   const orderI = inputEl('120', 'number');
   const scope = radioRow('cscope', [
-    { value: 'project', label: '项目内可见' },
-    { value: 'entity', label: '仅本角色' },
-    { value: 'global', label: '全局' }
+    { value: 'project', label: t('项目内可见') },
+    { value: 'entity', label: t('仅本角色') },
+    { value: 'global', label: t('全局') }
   ], 'project');
-  wrap.appendChild(row('分类名称', nameI));
-  wrap.appendChild(row('颜色', colorI));
-  wrap.appendChild(row('图标', iconI));
-  wrap.appendChild(row('排序值', orderI));
-  wrap.appendChild(row('可见性', scope));
-  wrap.appendChild(hint('分类决定积木的默认颜色、图标与在选择区里的位置。内置分类不可以删除。'));
+  wrap.appendChild(row(t('分类名称'), nameI));
+  wrap.appendChild(row(t('颜色'), colorI));
+  wrap.appendChild(row(t('图标'), iconI));
+  wrap.appendChild(row(t('排序值'), orderI));
+  wrap.appendChild(row(t('可见性'), scope));
+  wrap.appendChild(hint(t('分类决定积木的默认颜色、图标与在选择区里的位置。内置分类不可以删除。')));
 
   showModal({
-    title: '新建积木分类',
+    title: t('新建积木分类'),
     body: wrap,
-    okText: '创建',
+    okText: t('创建'),
     onOk: () => {
       const name = nameI.value.trim();
-      if (!name) { toast('请填写分类名称', 'warn'); return false; }
+      if (!name) { toast(t('请填写分类名称'), 'warn'); return false; }
       store.addCategory({
         name, color: colorI.value, icon: iconI.value,
         order: parseInt(orderI.value, 10) || 120, scope: getRadio(scope)
       });
       if (onChange) onChange();
-      toast(`已创建分类「${name}」`, 'ok');
+      toast(t('已创建分类「{_1}」', { _1: name }), 'ok');
       return true;
     }
   });
@@ -313,9 +314,9 @@ export function openCategoryDialog(store, onChange) {
 /* 实体属性编辑（场景视图里也用）                                        */
 /* ================================================================== */
 export const SHAPE_OPTIONS = [
-  { value: 'box', label: '方块' }, { value: 'capsule', label: '胶囊' },
-  { value: 'circle', label: '圆形' }, { value: 'triangle', label: '三角' },
-  { value: 'diamond', label: '菱形' }
+  { value: 'box', label: t('方块') }, { value: 'capsule', label: t('胶囊') },
+  { value: 'circle', label: t('圆形') }, { value: 'triangle', label: t('三角') },
+  { value: 'diamond', label: t('菱形') }
 ];
 
 export { BUILTIN_CATEGORIES, macroDefOf };

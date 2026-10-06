@@ -12,6 +12,7 @@
  *   · 用户分类和「我的积木」里多一个「新建积木」按钮 + 一句引导
  */
 
+import { t } from '../../core/i18n.js';
 import * as Blockly from '../../vendor/scratch-blocks.js';
 import { ALL_DEFS, instantiate } from '../../core/blockdefs.js';
 import { entryForNode } from './defs.js';
@@ -98,10 +99,10 @@ export function buildToolboxXml(project) {
     // 「我的积木」和用户自建分类里给一个新建入口 + 引导
     if (c.id === 'myblocks' || !c.builtin) {
       if (!body.length) {
-        body.push(`<label text="${esc('这个分类还是空的')}"></label>`);
-        body.push(`<label text="${esc('在画布上搭一段积木 → 右键「合成新积木」→ 归到这里')}"></label>`);
+        body.push(`<label text="${esc(t('这个分类还是空的'))}"></label>`);
+        body.push(`<label text="${esc(t('在画布上搭一段积木 → 右键「合成新积木」→ 归到这里'))}"></label>`);
       }
-      body.unshift(`<button text="${esc('＋ 新建积木')}" callbackKey="df_new_macro_${esc(c.id)}"></button>`);
+      body.unshift(`<button text="${esc(t('＋ 新建积木'))}" callbackKey="df_new_macro_${esc(c.id)}"></button>`);
     }
 
     parts.push(

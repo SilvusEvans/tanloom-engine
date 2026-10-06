@@ -8,6 +8,7 @@
  * 生产环境把 textarea+pre 换成 Monaco 即可，其余逻辑（注解、同步、冲突）不变。
  */
 
+import { t } from '../core/i18n.js';
 import { tokenize } from '../core/parser.js';
 
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -68,7 +69,7 @@ export class CodeEditor {
       this.dirty.set(this.current.name, this.inputEl.value);
       this._paint();
       this._renderFileList();
-      this._status('未保存 · 按 Ctrl+S 同步回积木视图');
+      this._status(t('未保存 · 按 Ctrl+S 同步回积木视图'));
     });
     this.inputEl.addEventListener('scroll', () => {
       this.highlightEl.scrollTop = this.inputEl.scrollTop;
@@ -111,7 +112,7 @@ export class CodeEditor {
       if (f.readonly) {
         const ro = document.createElement('span');
         ro.className = 'ro';
-        ro.textContent = '只读';
+        ro.textContent = t('只读');
         el.appendChild(ro);
       } else if (this.dirty.has(f.name)) {
         const d = document.createElement('span');
@@ -136,7 +137,7 @@ export class CodeEditor {
     this.inputEl.readOnly = !!f.readonly;
     this.highlightEl.innerHTML = highlight(text);
     this._paint();
-    this._status(f.readonly ? '只读参考文件' : '已同步 · 编辑后按 Ctrl+S 写回积木');
+    this._status(f.readonly ? t('只读参考文件') : t('已同步 · 编辑后按 Ctrl+S 写回积木'));
   }
 
   _paint() {
@@ -145,7 +146,7 @@ export class CodeEditor {
 
   _status(text, kind = '') {
     this.statusEl.innerHTML = `<span class="${kind}">${esc(text)}</span>` +
-      (this.diagnostics.length ? `<span class="err">${this.diagnostics.length} 条解析提示</span>` : '');
+      (this.diagnostics.length ? t('<span class="err">{_1} 条解析提示</span>', { _1: this.diagnostics.length }) : '');
   }
 
   /* ---------------- 保存：代码 → 积木 ---------------- */
@@ -159,7 +160,7 @@ export class CodeEditor {
     this.conflict = false;
     this._renderBanner();
     this._renderFileList();
-    this._status(res.ok ? '✓ 已同步回积木视图' : '同步完成，但有提示', res.ok ? '' : 'err');
+    this._status(res.ok ? t('✓ 已同步回积木视图') : t('同步完成，但有提示'), res.ok ? '' : 'err');
     this._loadCurrent();
     return res;
   }
@@ -188,15 +189,15 @@ export class CodeEditor {
     this.bannerEl.classList.remove('hidden');
     this.bannerEl.innerHTML = '';
     const t = document.createElement('span');
-    t.textContent = '⚠ 积木视图有新的改动，而这里的代码还没保存 —— 二者已经分叉。';
+    t.textContent = t('⚠ 积木视图有新的改动，而这里的代码还没保存 —— 二者已经分叉。');
     const sp = document.createElement('span');
     sp.className = 'spacer';
     const b1 = document.createElement('button');
     b1.className = 'primary';
-    b1.textContent = '以代码为准（覆盖积木）';
+    b1.textContent = t('以代码为准（覆盖积木）');
     b1.addEventListener('click', () => this.save());
     const b2 = document.createElement('button');
-    b2.textContent = '以积木为准（丢弃代码改动）';
+    b2.textContent = t('以积木为准（丢弃代码改动）');
     b2.addEventListener('click', () => this.revert());
     this.bannerEl.append(t, sp, b1, b2);
   }

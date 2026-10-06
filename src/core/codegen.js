@@ -10,6 +10,7 @@
  *   · 生成器只使用「受限 TypeScript 子集」，保证 parser 可以逐字解析回来
  */
 
+import { t } from './i18n.js';
 import { defOf } from './blockdefs.js';
 import { substituteParams, safeIdent, memberAccess } from './ir.js';
 import { BUILTIN_CHANNELS } from './registry.js';
@@ -44,13 +45,13 @@ class Gen {
       default: break;
     }
     const def = defOf(node, this.project);
-    if (!def) return '/* 未知节点 */ 0';
+    if (!def) return t('/* 未知节点 */ 0');
     if (def.isMacro) return this.macroCall(node, def, true);
     if (!def.gen) return this.codeFallback(node);
     return def.gen(node, this);
   }
   codeFallback(node) {
-    return `/* 未知积木 ${String(node.type).replace(/\*\//g, '')} */ 0`;
+    return t('/* 未知积木 {_1} */ 0', { _1: String(node.type).replace(/\*\//g, '') });
   }
   num(v) {
     const n = Number(v);
@@ -85,7 +86,7 @@ class Gen {
       return [`${this.ind()}await ${this.macroFnName(macro)}(${this.argList(node.args, macro)});`];
     }
     const def = defOf(node, this.project);
-    if (!def || !def.gen) return [`${this.ind()}// ⚠ 无法生成的语句：${node.type}`];
+    if (!def || !def.gen) return [t('{_1}// ⚠ 无法生成的语句：{_2}', { _1: this.ind(), _2: node.type })];
     const out = def.gen(node, this);
     return Array.isArray(out) ? out : [String(out)];
   }
@@ -154,7 +155,7 @@ function genScript(script, entityName, g) {
   lines.push(`  const self = ctx.self;`);
   g.level = 1;
   const body = g.seq(script.body, 1);
-  if (!body.length) lines.push('  // （空脚本）');
+  if (!body.length) lines.push(t('  // （空脚本）'));
   lines.push(...body);
   lines.push('}');
   return lines.join('\n');
@@ -181,11 +182,11 @@ function genMacro(macro, g) {
   const fmt = (n) => `${safeIdent(n) || 'p_' + String(n).replace(/[^\w]/g, '')}: number`;
   if (isStmt) {
     lines.push(`export async function ${g.macroFnName(macro)}(self: Entity, ${names.map(fmt).join(', ')}) {`);
-    lines.push('  // 语句型合成积木：由「合成新积木」生成');
+    lines.push(t('  // 语句型合成积木：由「合成新积木」生成'));
     lines.push('}');
   } else {
     lines.push(`export function ${g.macroFnName(macro)}(${names.map(fmt).join(', ')}): number {`);
-    lines.push('  // 表达式型合成积木');
+    lines.push(t('  // 表达式型合成积木'));
     lines.push('  return 0;');
     lines.push('}');
   }
@@ -199,12 +200,12 @@ export function generateFiles(project) {
   const files = [];
 
   const header =
-    `/* Tanloom Engine · 由积木视图同步生成\n` +
-    ` * 本文件与积木视图共享同一份 IR（唯一真源），可以双向编辑：\n` +
-    ` *   · 积木改动 → 自动重写本文件\n` +
-    ` *   · 本文件改动 → 按 Ctrl+S 解析回积木\n` +
-    ` * 注解 // @on xxx 表示该函数订阅哪个广播频道。\n` +
-    ` * 支持 // @macro name(p) => 表达式 来定义新的合成积木。\n` +
+    t('/* Tanloom Engine · 由积木视图同步生成\n') +
+    t(' * 本文件与积木视图共享同一份 IR（唯一真源），可以双向编辑：\n') +
+    t(' *   · 积木改动 → 自动重写本文件\n') +
+    t(' *   · 本文件改动 → 按 Ctrl+S 解析回积木\n') +
+    t(' * 注解 // @on xxx 表示该函数订阅哪个广播频道。\n') +
+    t(' * 支持 // @macro name(p) => 表达式 来定义新的合成积木。\n') +
     ` */\n` +
     `import type { FrameCtx, Entity } from './_runtime';\n` +
     `import { tl, vars, lists } from './_runtime';\n`;
@@ -214,11 +215,11 @@ export function generateFiles(project) {
     const g = new Gen(project);
     const parts = [];
     parts.push(header);
-    parts.push(`/* 实体：${ent.name}  id：${ent.id} */\n`);
+    parts.push(t('/* 实体：{_1}  id：{_2} */\n', { _1: ent.name, _2: ent.id }));
     const macroDefs = Object.values(project.macros || {}).filter((m) => m.scope === 'entity' && m.owner === ent.id);
     for (const m of macroDefs) parts.push(genMacro(m, g) + '\n');
     for (const sc of ent.scripts || []) parts.push(genScript(sc, ent.name, g) + '\n');
-    if (!(ent.scripts || []).length && !macroDefs.length) parts.push('// 这个实体还没有脚本。回到积木视图拖一个「当收到 [update]」出来试试。\n');
+    if (!(ent.scripts || []).length && !macroDefs.length) parts.push(t('// 这个实体还没有脚本。回到积木视图拖一个「当收到 [update]」出来试试。\n'));
     files.push({ name: `${ent.name}.ts`, entityId: ent.id, entityName: ent.name, text: parts.join('\n') });
   }
 
@@ -226,7 +227,7 @@ export function generateFiles(project) {
   const globalMacros = Object.values(project.macros || {}).filter((m) => m.scope !== 'entity');
   if (globalMacros.length) {
     const g = new Gen(project);
-    const parts = [header, '/* 项目级 / 全局合成积木 */\n'];
+    const parts = [header, t('/* 项目级 / 全局合成积木 */\n')];
     for (const m of globalMacros) parts.push(genMacro(m, g) + '\n');
     files.push({ name: '_blocks.ts', entityId: null, entityName: null, text: parts.join('\n') });
   }

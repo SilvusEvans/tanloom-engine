@@ -12,6 +12,7 @@
  *   // @macro 平方(x) => (x)*(x)  → 合成积木定义
  */
 
+import { t } from './i18n.js';
 import { E, seq, uid, safeIdent } from './ir.js';
 
 /* ================================================================== */
@@ -109,7 +110,7 @@ class P {
   expectPunc(v) {
     this.skipComments();
     if (this.isPunc(v)) return this.take();
-    this.diag.push(`第 ${this.line(this.cur)} 行：期望 "${v}"，实际是 "${this.cur.value}"`);
+    this.diag.push(t('第 {_1} 行：期望 "{_2}"，实际是 "{_3}"', { _1: this.line(this.cur), _2: v, _3: this.cur.value }));
     return { type: 'punc', value: v, start: this.cur.start, end: this.cur.start };
   }
   line(tok) { return this.src.slice(0, tok.start).split('\n').length; }
@@ -951,7 +952,7 @@ export function parseFile(text, opts = {}) {
     }
     p.skipComments();
     if (!p.isPunc('{')) {
-      diagnostics.push({ line: p.line(p.cur), msg: `函数 ${fnName} 缺少函数体` });
+      diagnostics.push({ line: p.line(p.cur), msg: t('函数 {fnName} 缺少函数体', { fnName }) });
       continue;
     }
     const body = parseBraceBlock(p);

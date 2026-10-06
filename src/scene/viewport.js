@@ -1,3 +1,4 @@
+import { t } from '../core/i18n.js';
 /**
  * Tanloom Engine — 舞台视口
  * 用 Canvas 2D 直接画运行时状态。不依赖任何第三方渲染库：
@@ -209,7 +210,7 @@ export class StageView {
     if (this.showChrome && !rt.isRunning()) {
       ctx.font = 'bold 11px "PingFang SC", sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,.28)';
-      ctx.fillText('未运行 · 按 ▶ 开始', 12, ch - 10);
+      ctx.fillText(t('未运行 · 按 ▶ 开始'), 12, ch - 10);
     }
   }
 

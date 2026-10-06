@@ -15,6 +15,7 @@
  * 重新投影 → 又触发 change」会打转。
  */
 
+import { t, opt, scratchLocale } from '../../core/i18n.js';
 import * as Blockly from '../../vendor/scratch-blocks.js';
 import { MEDIA_URL } from '../../vendor/scratch-blocks.js';
 import { uid } from '../../core/ir.js';
@@ -52,7 +53,7 @@ export class ScratchWorkspace {
     this.states = new Map();
     this.pending = false;
 
-    Blockly.ScratchMsgs.setLocale('zh-cn');
+    Blockly.ScratchMsgs.setLocale(scratchLocale());
     defineBlocks();
     // 宏（合成积木）也要先注册成积木类型，否则选择区和项目里的调用都认不出来
     defineMacroBlocks(store.project.macros || {});
@@ -137,7 +138,7 @@ export class ScratchWorkspace {
       const tops = this.ws.getTopBlocks(true);
       tops.forEach((b, i) => { if (scripts && scripts[i]) b.__tlScriptId = scripts[i].id; });
     } catch (err) {
-      console.error('[积木] 载入失败', err);
+      console.error(t('[积木] 载入失败'), err);
     } finally {
       this.suppress = false;
     }
@@ -278,7 +279,7 @@ export class ScratchWorkspace {
         body = xmlToSeq(wrapChain(el), project);
       }
     } catch (err) {
-      console.error('[积木] 读取要执行的脚本失败', err);
+      console.error(t('[积木] 读取要执行的脚本失败'), err);
       return;
     }
     if (!body || !body.blocks.length) return;
@@ -287,10 +288,10 @@ export class ScratchWorkspace {
     // 所以没在跑的时候先按一次「运行」（＝绿旗）再执行这段。
     if (!this.rt.isRunning()) {
       if (this.opts.onAutoRun) this.opts.onAutoRun();
-      toast('已自动开始运行 —— 点积木就是立刻执行它', 'info', 2800);
+      toast(t('已自动开始运行 —— 点积木就是立刻执行它'), 'info', 2800);
     }
     const r = this.rt.runStack(ent.name, hat, body);
-    if (!r.ok) toast('没能执行：' + r.reason, 'warn');
+    if (!r.ok) toast(t('没能执行：') + r.reason, 'warn');
   }
 
   /** 找积木：先主工作区，再退到选择区的飞出面板（它是另一个 workspace） */
@@ -333,7 +334,7 @@ export class ScratchWorkspace {
         this.hideValueBox();
         Blockly.reportValue(block.id, text);
       } catch (err2) {
-        console.warn('[积木] 取值气泡失败', err2);
+        console.warn(t('[积木] 取值气泡失败'), err2);
       }
     }
     return text;
@@ -369,7 +370,7 @@ export class ScratchWorkspace {
     ent.scripts = scripts;
     ent.scriptPos = scriptPos;
     this._lastSignature = this._signature(ent);
-    this.store.commit('编辑积木', null, { reason: 'blocks-ui' });
+    this.store.commit(t('编辑积木'), null, { reason: 'blocks-ui' });
     // 撤销统一由 store 负责：Blockly 自己的栈留着只会和 Ctrl+Z 打架
     try { this.ws.clearUndo(); } catch { /* ignore */ }
     if (this.opts.onChange) this.opts.onChange();
@@ -441,7 +442,7 @@ export class ScratchWorkspace {
     registry.register({
       id: 'df_make_macro',
       scopeType: BLOCK,
-      displayText: () => '合成新积木…',
+      displayText: () => t('合成新积木…'),
       // 帽块没有「上一块」，被替换掉会连事件入口一起丢，所以不给这个选项
       preconditionFn: (scope) => (scope.block.previousConnection ? 'enabled' : 'disabled'),
       weight: 10,
@@ -451,7 +452,7 @@ export class ScratchWorkspace {
     registry.register({
       id: 'df_edit_macro',
       scopeType: BLOCK,
-      displayText: () => '编辑积木定义…',
+      displayText: () => t('编辑积木定义…'),
       preconditionFn: (scope) => {
         const id = macroIdOfType(scope.block.type);
         return id && this.store.project.macros[id] ? 'enabled' : 'hidden';
@@ -533,7 +534,7 @@ export class ScratchWorkspace {
         if (next) nb.nextConnection.connect(next);
       }
     } catch (err) {
-      console.error('[积木] 替换为合成积木失败', err);
+      console.error(t('[积木] 替换为合成积木失败'), err);
     } finally {
       Blockly.Events.setGroup(false);
     }
@@ -569,7 +570,7 @@ export class ScratchWorkspace {
         if (this.opts.onChange) this.opts.onChange();
       },
     });
-    if (cat) toast(`新积木会归到「${cat.name}」`, 'info', 2600);
+    if (cat) toast(t('新积木会归到「{_1}」', { _1: cat.name }), 'info', 2600);
   }
 
   /** 把一块新积木的调用摆到画布右下角（找一块空位） */
@@ -591,7 +592,7 @@ export class ScratchWorkspace {
       nb.moveBy(xy.x + 24, xy.y + 24);
       this._scheduleWrite();
     } catch (err) {
-      console.error('[积木] 放置新积木失败', err);
+      console.error(t('[积木] 放置新积木失败'), err);
     }
   }
 
@@ -617,7 +618,7 @@ export class ScratchWorkspace {
       const tb = this.ws.getToolbox && this.ws.getToolbox();
       if (tb && typeof tb.forceRerender === 'function') tb.forceRerender();
     } catch (err) {
-      console.error('[积木] 刷新选择区失败', err);
+      console.error(t('[积木] 刷新选择区失败'), err);
     }
   }
 
@@ -666,14 +667,17 @@ export class ScratchWorkspace {
 /* ------------------------------------------------------------------ */
 /* 常量                                                                */
 /* ------------------------------------------------------------------ */
-const PHASE_LABEL = (name) => ({
+const PHASE_LABEL = (name) => opt(name, {
   frame_start: '帧开始', input: '输入', physics_update: '物理更新',
   update: '每帧更新', late_update: '延迟更新', render: '渲染', frame_end: '帧结束',
-}[name] || name);
+}[name] || name, 'phase');
 
 const SOUNDS = [
-  { label: '哔', value: 'beep' }, { label: '跳跃', value: 'jump' },
-  { label: '金币', value: 'coin' }, { label: '受伤', value: 'hurt' }, { label: '爆炸', value: 'boom' },
+  { label: opt('beep', '哔', 'sound'), value: 'beep' },
+  { label: opt('jump', '跳跃', 'sound'), value: 'jump' },
+  { label: opt('coin', '金币', 'sound'), value: 'coin' },
+  { label: opt('hurt', '受伤', 'sound'), value: 'hurt' },
+  { label: opt('boom', '爆炸', 'sound'), value: 'boom' },
 ];
 
 /** 把 <block> 包一层临时容器，好让链式解析器把它当作栈头读 */
