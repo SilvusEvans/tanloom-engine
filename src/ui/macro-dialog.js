@@ -14,7 +14,7 @@ import { t } from '../core/i18n.js';
 import { uid, seq, cloneIR, E } from '../core/ir.js';
 import { showModal, row, inputEl, selectEl, radioRow, getRadio, hint, toast } from './dialogs.js';
 import { defOf, macroDefOf } from '../core/blockdefs.js';
-import { BUILTIN_CATEGORIES } from '../core/registry.js';
+import { BUILTIN_CATEGORIES, categoryLabel } from '../core/registry.js';
 
 /* ------------------------------------------------------------------ */
 /* 收集子树里的字面量（作为「自由变量」候选）                            */
@@ -136,7 +136,7 @@ export function openMacroDialog({ store, macroId, source, onChange }) {
   });
 
   const catOpts = Object.values(p.categories).sort((a, b) => (a.order || 0) - (b.order || 0))
-    .map((c) => ({ label: `${c.icon || ''} ${c.name}`, value: c.id }));
+    .map((c) => ({ label: `${c.icon || ''} ${categoryLabel(c)}`, value: c.id }));
   const defaultCat = editing
     ? macro.category
     : ((source && source.category) || (isExprBody ? 'operators' : 'myblocks'));

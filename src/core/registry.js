@@ -3,6 +3,8 @@
  * 对应策划案 §5.7（广播注册表）与 §8.1/§8.4（分类体系与分类 IR）
  */
 
+import { opt } from './i18n.js';
+
 /** Scratch 3 官方分类配色，保证积木观感与 Scratch 一致 */
 export const BUILTIN_CATEGORIES = [
   { id: 'event',     name: '事件',   color: '#FFBF00', icon: '⚑', order: 10, builtin: true, dark: '#CC9900' },
@@ -21,6 +23,24 @@ export const BUILTIN_CATEGORIES = [
 export const CATEGORY_COLORS = Object.fromEntries(
   BUILTIN_CATEGORIES.map((c) => [c.id, c])
 );
+
+/** 内置分类的**出厂名**（用来判断用户有没有改过名） */
+const BUILTIN_NAME = Object.fromEntries(BUILTIN_CATEGORIES.map((c) => [c.id, c.name]));
+
+/**
+ * 分类的**显示名**。
+ *
+ * 分类名是项目数据（用户能改名，存进 .tle），所以不能直接翻译它 —— 会把人家的
+ * 改名覆盖掉。这里的规则是：
+ *   · 内置分类、且名字还是出厂名 → 按界面语言显示（英/简/繁）
+ *   · 用户改过名的内置分类、以及用户自建的分类 → 原样显示他自己写的
+ */
+export function categoryLabel(cat) {
+  if (!cat) return '';
+  const base = BUILTIN_NAME[cat.id];
+  if (cat.builtin && base && cat.name === base) return opt(cat.id, base, 'cat');
+  return cat.name;
+}
 
 /** 帧循环阶段广播 —— 借鉴 Godot 的 _process / _physics_process 阶段划分 */
 export const BUILTIN_CHANNELS = [

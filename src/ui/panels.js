@@ -5,7 +5,7 @@
  */
 
 import { t } from '../core/i18n.js';
-import { BUILTIN_CHANNELS } from '../core/registry.js';
+import { BUILTIN_CHANNELS, categoryLabel } from '../core/registry.js';
 import { showMenu, showInlineInput, toast } from './dialogs.js';
 import { SHAPE_OPTIONS } from './macro-dialog.js';
 
@@ -367,7 +367,7 @@ export function renderAssets(el, store, rt) {
       });
       items.push({ label: t('重命名'), onClick: () => showInlineInput(document.body.getBoundingClientRect(), c.name, (v) => store.updateCategory(c.id, { name: v }), { width: 130 }) });
       if (!c.builtin) items.push({ label: t('删除'), onClick: () => store.removeCategory(c.id) });
-      cats.appendChild(listRow(`${c.icon || ''} ${c.name}`, c.builtin ? t('内置') : `${c.id}`, items, c.color));
+      cats.appendChild(listRow(`${c.icon || ''} ${categoryLabel(c)}`, c.builtin ? t('内置') : `${c.id}`, items, c.color));
     }
   }
   if (macros) {

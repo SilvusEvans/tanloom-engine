@@ -104,4 +104,20 @@ export const OPTIONS = {
 
   /* ---- 实体特指 ---- */
   'entity.$self': { en: 'myself', 'zh-Hans': '自己', 'zh-Hant': '自己' },
+
+  /* ---- 内置分类名 ----
+   * 分类名存在项目文件里（用户能改名），所以这里只负责**显示**：
+   * 只有「内置分类且名字没被改过」才按语言显示译名，用户改过的就照他自己的写法。
+   * 见 core/registry.js 的 categoryLabel()。 */
+  'cat.event':     { en: 'Events',      'zh-Hans': '事件',     'zh-Hant': '事件' },
+  'cat.control':   { en: 'Control',     'zh-Hans': '控制',     'zh-Hant': '控制' },
+  'cat.motion':    { en: 'Motion',      'zh-Hans': '运动',     'zh-Hant': '動作' },
+  'cat.looks':     { en: 'Looks',       'zh-Hans': '外观',     'zh-Hant': '外觀' },
+  'cat.sound':     { en: 'Sound',       'zh-Hans': '声音',     'zh-Hant': '音效' },
+  'cat.sensing':   { en: 'Sensing',     'zh-Hans': '侦测',     'zh-Hant': '偵測' },
+  'cat.operators': { en: 'Operators',   'zh-Hans': '运算',     'zh-Hant': '運算' },
+  'cat.variables': { en: 'Variables',   'zh-Hans': '变量',     'zh-Hant': '變數' },
+  'cat.lists':     { en: 'Lists',       'zh-Hans': '列表',     'zh-Hant': '清單' },
+  'cat.game':      { en: 'Game',        'zh-Hans': '游戏专用', 'zh-Hant': '遊戲專用' },
+  'cat.myblocks':  { en: 'My Blocks',   'zh-Hans': '我的积木', 'zh-Hant': '自訂積木' },
 };

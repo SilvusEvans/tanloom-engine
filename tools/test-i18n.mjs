@@ -26,6 +26,7 @@ import { MSG } from '../src/core/i18n-msg.js';
 import { TPL } from '../src/core/i18n-tpl.js';
 import { OPTIONS } from '../src/core/i18n-options.js';
 import { HELP } from '../src/core/i18n-help.js';
+import { BUILTIN_CATEGORIES } from '../src/core/registry.js';
 
 const DICT = { ...UI, ...SHELL, ...BLOCKS, ...MSG, ...TPL };
 const LANGS = ['en', 'zh-Hant'];
@@ -226,6 +227,13 @@ for (const [name, ns] of Object.entries(LIST_NS)) {
   }
 }
 ok(missingOpt.length === 0, missingOpt.length ? `${missingOpt.length} 个下拉值没译文：\n     ` + missingOpt.join('\n     ') : `八个下拉列表的所有取值都在 OPTIONS 里`);
+
+/* ---------------- 4b. 内置分类名 ---------------- */
+const missingCat = BUILTIN_CATEGORIES
+  .map((c) => `cat.${c.id}`)
+  .filter((k) => !OPTIONS[k]);
+ok(missingCat.length === 0,
+  missingCat.length ? `内置分类缺译名：${missingCat.join('、')}` : `${BUILTIN_CATEGORIES.length} 个内置分类都有译名（用户改过名的分类照原样显示）`);
 
 /* ---------------- 5. 帮助对话框三语齐全 ---------------- */
 console.log('\n=== 5. 帮助对话框三种语言都在 ===');

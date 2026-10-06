@@ -15,6 +15,7 @@
 import { t } from '../../core/i18n.js';
 import * as Blockly from '../../vendor/scratch-blocks.js';
 import { ALL_DEFS, instantiate } from '../../core/blockdefs.js';
+import { categoryLabel } from '../../core/registry.js';
 import { entryForNode } from './defs.js';
 import { nodeToXml } from './sync.js';
 import { SHADES } from './theme.js';
@@ -106,7 +107,7 @@ export function buildToolboxXml(project) {
     }
 
     parts.push(
-      `<category name="${esc(c.name)}" id="${esc(c.id)}"` +
+      `<category name="${esc(categoryLabel(c))}" id="${esc(c.id)}"` +
       ` colour="${esc(primary)}" secondaryColour="${esc(secondary)}">${body.join('')}</category>`,
     );
   }
