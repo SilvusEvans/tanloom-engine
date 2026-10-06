@@ -199,7 +199,8 @@ export function xmlToSeq(holder, project) {
   let cur = childBlocks(holder)[0];
   let guard = 0;
   while (cur && guard++ < 5000) {
-    out.push(xmlToNode(cur, project));
+    const node = xmlToNode(cur, project);
+    if (node) out.push(node);
     const nextHolder = Array.from(cur.children).find((c) => c.tagName === 'next');
     cur = nextHolder ? childBlocks(nextHolder)[0] : null;
   }
@@ -210,7 +211,10 @@ export function xmlToSeq(holder, project) {
 function valueToIr(holder, project, fallback) {
   if (!holder) return fallback;
   const block = childBlocks(holder)[0];
-  if (block) return xmlToNode(block, project);
+  if (block) {
+    const node = xmlToNode(block, project);
+    if (node) return node;
+  }
   const shadow = Array.from(holder.children).find((c) => c.tagName === 'shadow');
   if (shadow) return shadowToIr(shadow);
   return fallback;
@@ -242,8 +246,8 @@ export function xmlToNode(el, project) {
     try {
       const parsed = JSON.parse(raw);
       if (parsed && parsed.type) return parsed;
-    } catch { /* 不是 JSON：当注释保留 */ }
-    return { type: 'CodeBlockStatement', code: '// ' + raw };
+    } catch { /* 不是 JSON：旧版未知积木，已无代码积木可承载，丢弃 */ }
+    return null;
   }
 
   /* ---- 宏调用 ---- */
@@ -261,7 +265,7 @@ export function xmlToNode(el, project) {
   }
 
   const entry = BY_BLOCK[type];
-  if (!entry) return { type: 'CodeBlockStatement', code: t('// 未知积木 {_1}', { _1: type }) };
+  if (!entry) return null;   // 没有对应实现的积木：丢弃（不再降级成代码积木）
 
   // 注意：这里按 **Blockly 参数名** 收集（不是 IR 字段名），
   // 因为 entry.make 是按 block 定义写的（f.ENTITY / f.SUBSTACK …）。
@@ -285,7 +289,7 @@ export function xmlToNode(el, project) {
   }
 
   const built = entry.make(gathered);
-  return built || { type: 'CodeBlockStatement', code: t('// 无法还原 {_1}', { _1: type }) };
+  return built || null;   // 还原失败时丢弃，不再降级成代码积木
 }
 
 /* ------------------------------------------------------------------ */

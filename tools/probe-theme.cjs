@@ -20,6 +20,9 @@ app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('no-sandbox');
 app.setPath('userData', path.join(require('os').tmpdir(), 'tanloom-theme'));
+// 探针的 userData 必须每次干净：上一轮跑完 localStorage 里留着 theme=light、
+// accent=#1b2a6b，下一轮开头那条「默认主题生效（暗色）」就会无辜地失败
+try { fs.rmSync(path.join(require('os').tmpdir(), 'tanloom-theme'), { recursive: true, force: true }); } catch { /* 没有就正好 */ }
 registerScheme();
 const ROOT = path.join(__dirname, '..');
 
@@ -43,9 +46,30 @@ app.whenReady().then(async () => {
   const shotDir = path.join(ROOT, 'tools', 'shots');
   fs.mkdirSync(shotDir, { recursive: true });
 
+  try {
   await win.loadURL(APP_URL);
   await new Promise((r) => setTimeout(r, 2300));
-  const run = (js) => win.webContents.executeJavaScript(js);
+  // executeJavaScript 是有可能「永不返回」的（页面卡在半路上、reload 后一直没回头），
+  // 那会让整轮探针无声地挂死。给它加一道超时：超时就抛，由外面的 try/catch 收摊，
+  // 至少能给出「第几步卡住了」这个结论。
+  const run = async (js, ms = 25000) => {
+    let timer;
+    try {
+      return await Promise.race([
+        win.webContents.executeJavaScript(js),
+        new Promise((_, rej) => { timer = setTimeout(() => rej(new Error(`executeJavaScript 超时 ${ms}ms`)), ms); }),
+      ]);
+    } finally { clearTimeout(timer); }
+  };
+  /** 页面回到「__tl 已就绪」为止 —— reload 之后不能只死等固定毫秒 */
+  const waitReady = async (ms = 40000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      try { if (await run('!!(window.__tl && window.__tl.appearance)', 4000)) return true; } catch { /* 下一拍再来 */ }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    return false;
+  };
   // capturePage 在「隐藏窗口 + 整页换肤」这种大范围重绘下，抓一次很可能还是旧帧
   // （比冒烟测试里的「第一张是上一帧」更严重：抓到的可能是几秒前那一帧）。
   // 所以连抓三拍、每拍之间留足重绘时间，取最后一拍。
@@ -81,13 +105,13 @@ app.whenReady().then(async () => {
     `theme=${boot.theme} --accent=${boot.accent} --panel=${boot.panel} data-theme-dark=${boot.dark}`);
 
   /* ============================================================ */
-  console.log('\n=== 打开外观对话框 → 切主题（走真实点击） ===');
+  console.log('\n=== 打开设置对话框 → 切主题（走真实点击） ===');
   const opened = await run(`(async () => {
     const before = getComputedStyle(document.body).backgroundColor;
-    document.querySelector('#btn-appearance').click();
+    document.querySelector('#btn-settings').click();
     await new Promise(r => setTimeout(r, 260));
     const modal = document.querySelector('.modal-back');
-    if (!modal) return { err: '点了「外观」但没弹对话框' };
+    if (!modal) return { err: '点了「设置」但没弹对话框' };
     return {
       before,
       title: modal.querySelector('h3').textContent,
@@ -97,7 +121,7 @@ app.whenReady().then(async () => {
       preview: !!modal.querySelector('.ap-preview'),
     };
   })()`);
-  check('顶栏「外观」能弹出对话框',
+  check('顶栏「设置」能弹出对话框',
     !!opened.title,
     opened.err || `${opened.title}｜主题卡 ${(opened.themes || []).length} 张（含「跟随系统」）·重点色 ${opened.dots} 个（含自定义取色器）·下拉 ${opened.selects} 个｜预览=${opened.preview}`);
 
@@ -271,9 +295,225 @@ app.whenReady().then(async () => {
     `--ui-scale=${scale.vUi} --code-scale=${scale.vCode}`);
 
   /* ============================================================ */
+  console.log('\n=== 编辑区主题：积木画布与代码区共用一套 ===');
+  const codeTheme = await run(`(async () => {
+    const ap = window.__tl.appearance;
+    const sel = document.querySelector('.ap-sel-code-theme');
+    if (!sel) return { err: '设置对话框里没有「编辑区主题」下拉' };
+    const cs = () => getComputedStyle(document.documentElement);
+    const preview = document.querySelector('.ap-preview');
+    // 积木那套色不在 CSS 变量里，得问 scratch-blocks 自己要（它就是照这个画积木的）
+    const comp = (n) => {
+      const w = window.__tl.ws && window.__tl.ws.ws;
+      if (!w) return '';
+      const th = w.getTheme();
+      if (typeof th.getComponentStyle === 'function') return th.getComponentStyle(n);
+      return (th.componentStyles || {})[n] || '';
+    };
+    const blockStyle = (n) => {
+      const w = window.__tl.ws && window.__tl.ws.ws;
+      if (!w) return '';
+      const th = w.getTheme();
+      const bs = th.blockStyles || (typeof th.getBlockStyles === 'function' ? th.getBlockStyles() : {});
+      return (bs[n] && bs[n].colourPrimary) || '';
+    };
+    const snap = () => {
+      const rect = document.querySelector('#blockly-host .blocklyMainBackground');
+      // 开了网格之后，主背景那块 rect 的 fill 是「指向网格图案的 url()」，
+      // 真正的底色写在 <defs> 里那个 pattern 的 rect 上 —— 所以要一路挖到它，
+      // 否则拿到的永远是同一个 url(...)，换什么主题都不会变
+      // 画布底色不在主背景那块 rect 上 —— 它填的是网格图案 url()；
+      // 真正的底色写在 svg 自己的 background-color 里。
+      // 工具箱则是另一个 DOM（div），它的背景由 componentStyle 给。
+      const host = document.querySelector('#blockly-host');
+      const svg = host && host.querySelector('svg.blocklySvg');
+      const tb = host && host.querySelector('.blocklyToolbox');
+      return {
+        state: ap.state.codeTheme,
+        codeBg: cs().getPropertyValue('--code-bg').trim(),
+        panel: cs().getPropertyValue('--panel').trim(),
+        wsSurface: cs().getPropertyValue('--ws-surface').trim(),
+        blocksBg: comp('workspaceBackgroundColour'),
+        blocksToolbox: comp('toolboxBackgroundColour'),
+        blocksFg: comp('toolboxForegroundColour'),
+        blocksField: blockStyle('textField'),
+        blocksAccent: comp('markerColour'),
+        // 真渲染：画布与工具箱的实际背景色
+        rectFill: svg ? getComputedStyle(svg).backgroundColor : (rect ? getComputedStyle(rect).fill : ''),
+        toolboxCss: tb ? getComputedStyle(tb).backgroundColor : '',
+        previewBg: getComputedStyle(preview).backgroundColor,
+        previewKw: preview.querySelector('.tok-kw') ? getComputedStyle(preview.querySelector('.tok-kw')).color : '',
+      };
+    };
+    const pick = async (v) => {
+      sel.value = v; sel.dispatchEvent(new Event('change'));
+      await new Promise(r => setTimeout(r, 260));
+    };
+    const follow = snap();
+    await pick('dracula');
+    const dracula = snap();
+    await pick('github-light');
+    const github = snap();
+    await pick('solarized-dark');
+    const solar = snap();
+    await pick('');
+    const back = snap();
+    return { err: null, options: [...sel.options].map(o => o.value), follow, dracula, github, solar, back };
+  })()`);
+  // 断言落在**计算值**上：只看 state.codeTheme 是抓不到「写了 CSS 却被别处盖住」的
+  check('设置对话框里有「编辑区主题」下拉（含「跟随界面主题」这个选项）',
+    !codeTheme.err && codeTheme.options.includes('') && codeTheme.options.includes('dracula'),
+    codeTheme.err || `选项 ${JSON.stringify(codeTheme.options)}`);
+  check('默认跟随界面主题：代码底色用的就是界面主题那一套',
+    codeTheme.follow && codeTheme.follow.state === null && codeTheme.follow.codeBg === '#ffffff',
+    codeTheme.follow ? `state=${codeTheme.follow.state} --code-bg=${codeTheme.follow.codeBg}` : '');
+  check('换代码区主题 → --code-bg 真的变了（编译进变量，不是只改状态）',
+    codeTheme.dracula && codeTheme.dracula.codeBg === '#282a36',
+    codeTheme.dracula ? `--code-bg=${codeTheme.dracula.codeBg}` : '');
+  check('代码区换深色，界面主题不被牵连（此时界面还是「晨曦 · 白」）',
+    codeTheme.dracula && codeTheme.dracula.panel === '#ffffff' && codeTheme.follow.panel === codeTheme.dracula.panel,
+    codeTheme.dracula ? `--panel=${codeTheme.dracula.panel}（换之前 ${codeTheme.follow.panel}）` : '');
+  check('对话框里的预览跟着代码区主题变（所见即所得）',
+    codeTheme.dracula && codeTheme.dracula.previewBg === 'rgb(40, 42, 54)'
+      && codeTheme.follow.previewBg === 'rgb(255, 255, 255)',
+    codeTheme.dracula ? `预览底色 ${codeTheme.follow.previewBg} → ${codeTheme.dracula.previewBg}` : '');
+  check('切回「跟随界面主题」→ 代码区配色回到界面那一套',
+    codeTheme.back && codeTheme.back.state === null && codeTheme.back.codeBg === '#ffffff',
+    codeTheme.back ? `state=${codeTheme.back.state} --code-bg=${codeTheme.back.codeBg}` : '');
+
+  /* --- 共享：积木画布必须与代码区同一个底色 --- */
+  check('积木画布跟着换底：换 dracula → 直接变成 #282a36，和代码区同一个值',
+    !!codeTheme.dracula && codeTheme.dracula.blocksBg === '#282a36'
+      && codeTheme.dracula.blocksBg === codeTheme.dracula.codeBg,
+    codeTheme.dracula ? `积木=${codeTheme.dracula.blocksBg}｜代码=${codeTheme.dracula.codeBg}` : '');
+  check('不是只改了主题对象 —— 画布那块 svg 的实际背景色也跟着变了',
+    !!codeTheme.dracula && codeTheme.dracula.rectFill === 'rgb(40, 42, 54)'
+      && codeTheme.github.rectFill === 'rgb(255, 255, 255)',
+    codeTheme.dracula ? `dracula=${codeTheme.dracula.rectFill}｜github=${codeTheme.github.rectFill}` : '');
+  check('工具箱那块 DOM 也一起换了底色（不是只换画布）',
+    !!codeTheme.dracula && codeTheme.dracula.toolboxCss !== codeTheme.github.toolboxCss
+      && codeTheme.dracula.toolboxCss !== codeTheme.dracula.rectFill,
+    codeTheme.dracula ? `dracula 画布=${codeTheme.dracula.rectFill} 工具箱=${codeTheme.dracula.toolboxCss}` : '');
+  check('浅色那套反向也成立：GitHub 白 → 积木画布与代码区都是 #ffffff',
+    !!codeTheme.github && codeTheme.github.blocksBg === '#ffffff' && codeTheme.github.codeBg === '#ffffff',
+    codeTheme.github ? `积木=${codeTheme.github.blocksBg}｜代码=${codeTheme.github.codeBg}` : '');
+  check('工具箱比画布深一档（同套里也有层次，不是一整块平色）',
+    !!codeTheme.dracula && codeTheme.dracula.blocksToolbox !== codeTheme.dracula.blocksBg,
+    codeTheme.dracula ? `工具箱=${codeTheme.dracula.blocksToolbox}｜画布=${codeTheme.dracula.blocksBg}` : '');
+  // 工具箱前景用的是 fgDim（比正文淡一档的灰），所以比「谁的亮度更高」，
+  // 而不是写死两个十六进制 —— 将来改了那两个色值，这条断言也不会假失败
+  const lum = (h) => {
+    const m = /^#(..)(..)(..)$/.exec(String(h));
+    if (!m) return 0;
+    const [r, g, b] = m.slice(1).map((x) => parseInt(x, 16));
+    return (r * 299 + g * 587 + b * 114) / 1000;
+  };
+  check('工具箱文字跟着反转：深色套用浅字、浅色套用深字',
+    !!codeTheme.dracula && lum(codeTheme.dracula.blocksFg) > lum(codeTheme.github.blocksFg)
+      && lum(codeTheme.solar.blocksFg) > lum(codeTheme.github.blocksFg),
+    codeTheme.dracula ? `dracula=${codeTheme.dracula.blocksFg}｜solar=${codeTheme.solar.blocksFg}｜github=${codeTheme.github.blocksFg}` : '');
+  check('输入槽不再是死白：深色主题下它跟着底色走',
+    !!codeTheme.dracula && codeTheme.dracula.blocksField !== '#ffffff'
+      && codeTheme.github.blocksField === '#ffffff',
+    codeTheme.dracula ? `dracula 槽=${codeTheme.dracula.blocksField}｜github 槽=${codeTheme.github.blocksField}` : '');
+  check('每换一套都重算（三套互不相同，没有漏刷新)',
+    !!codeTheme.solar && codeTheme.solar.blocksBg === '#002b36' && codeTheme.solar.codeBg === '#002b36'
+      && new Set([codeTheme.dracula.blocksBg, codeTheme.github.blocksBg, codeTheme.solar.blocksBg]).size === 3,
+    codeTheme.solar ? `solar=${codeTheme.solar.blocksBg}｜dracula=${codeTheme.dracula.blocksBg}｜github=${codeTheme.github.blocksBg}` : '');
+  check('切回「跟随界面主题」→ 积木画布也一起回到界面那一套（不会留在上次的颜色）',
+    codeTheme.back && codeTheme.back.blocksBg === codeTheme.back.codeBg
+      && codeTheme.back.blocksBg === '#ffffff',
+    codeTheme.back ? `积木=${codeTheme.back.blocksBg}｜代码=${codeTheme.back.codeBg}` : '');
+
+  /* ============================================================ */
+  console.log('\n=== Material You：动态取色（换重点色 = 换一整套皮肤） ===');
+  const md3 = await run(`(async () => {
+    const ap = window.__tl.appearance;
+    const cs = () => getComputedStyle(document.documentElement);
+    const v = (n) => cs().getPropertyValue(n).trim();
+    const names = [...document.querySelectorAll('.ap-theme .ap-name')].map(e => e.textContent);
+    const btns = [...document.querySelectorAll('.ap-theme')];
+    const clickTheme = async (kw) => {
+      const i = names.findIndex(n => n.includes(kw));
+      btns[i].click();
+      await new Promise(r => setTimeout(r, 200));
+    };
+    const snap = () => ({
+      theme: ap.state.theme,
+      accent: v('--accent'),
+      primary: v('--md-primary'),
+      onPrimary: v('--md-on-primary'),
+      container: v('--md-secondary-container'),
+      chrome: v('--chrome'), panel: v('--panel'), text: v('--text'),
+      surface: v('--md-surface'), outline: v('--md-outline'),
+      snackBg: v('--snack-bg'), hoverLayer: v('--hover-layer'),
+      tokKw: v('--tok-kw'),
+      rBtn: v('--r-btn'), rDialog: v('--r-dialog'), topbarH: v('--topbar-h'),
+      topbarPx: Math.round(document.querySelector('.topbar').getBoundingClientRect().height),
+    });
+
+    await clickTheme('Material You · 暗');
+    const dark = snap();
+    // 换种子：点预设色里的「品红」（蓝 / 紫 / 品红 … 第 3 个）
+    [...document.querySelectorAll('.ap-dot')][2].click();
+    await new Promise(r => setTimeout(r, 220));
+    const pink = snap();
+    // 换回普通主题，确认新变量没污染旧皮肤
+    await clickTheme('夜幕 · 蓝');
+    const legacy = snap();
+    // 复原：主题回「晨曦 · 白」、重点色回前面那颗自定义色（后面还要断言持久化）
+    await clickTheme('晨曦 · 白');
+    const input = document.querySelector('.ap-custom input[type="color"]');
+    input.value = '#1b2a6b';
+    input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new Event('change'));
+    await new Promise(r => setTimeout(r, 200));
+    return { names, dark, pink, legacy, restored: { theme: ap.state.theme, accent: ap.state.accent } };
+  })()`);
+
+  check('主题表里多了三套 Material You（配色是算出来的，不存色板）',
+    (md3.names || []).filter((n) => n.includes('Material You')).length === 3,
+    `主题卡共 ${(md3.names || []).length} 张：${(md3.names || []).join(' / ')}`);
+  check('换上 Material You → 输出 M3 角色色（主色 / 容器 / 描边都有值）',
+    !!md3.dark && !!md3.dark.primary && !!md3.dark.container && !!md3.dark.outline
+      && md3.dark.primary === md3.dark.accent,
+    md3.dark ? `--md-primary=${md3.dark.primary}  --accent=${md3.dark.accent}  容器=${md3.dark.container}  描边=${md3.dark.outline}` : '');
+  check('换重点色 = 换种子：整套界面跟着重新长一遍（不只改了 --accent）',
+    !!md3.pink && md3.pink.primary !== md3.dark.primary && md3.pink.chrome !== md3.dark.chrome
+      && md3.pink.panel !== md3.dark.panel && md3.pink.tokKw !== md3.dark.tokKw,
+    md3.pink ? `主色 ${md3.dark.primary}→${md3.pink.primary}｜底色 ${md3.dark.chrome}→${md3.pink.chrome}｜面板 ${md3.dark.panel}→${md3.pink.panel}｜代码关键字 ${md3.dark.tokKw}→${md3.pink.tokKw}` : '');
+  check('主色与「主色上的字」成对（M3 的 on-color，不是一律白字）',
+    !!md3.dark && md3.dark.onPrimary && md3.dark.onPrimary !== md3.dark.primary
+      && md3.dark.onPrimary !== md3.dark.container,
+    md3.dark ? `--md-on-primary=${md3.dark.onPrimary}（主色 ${md3.dark.primary}）` : '');
+  check('表面色有层次：底色 / 面板 / 容器各不相同（M3 靠层次不靠描边）',
+    !!md3.dark && md3.dark.surface !== md3.dark.panel && md3.dark.container !== md3.dark.panel,
+    md3.dark ? `surface=${md3.dark.surface} panel=${md3.dark.panel} container=${md3.dark.container}` : '');
+  check('形状跟着换：按钮全圆、对话框 28px、顶栏变高到 52',
+    !!md3.dark && md3.dark.rBtn === '999px' && md3.dark.rDialog === '28px'
+      && md3.dark.topbarH === '52px' && md3.dark.topbarPx >= 50,
+    md3.dark ? `--r-btn=${md3.dark.rBtn} --r-dialog=${md3.dark.rDialog} 顶栏=${md3.dark.topbarH}（实测 ${md3.dark.topbarPx}px）` : '');
+  check('提示条用反色块（M3 snackbar：深色模式下它是浅的）',
+    !!md3.dark && !!md3.dark.snackBg && md3.dark.snackBg !== md3.dark.panel
+      && md3.dark.snackBg !== md3.dark.chrome,
+    md3.dark ? `--snack-bg=${md3.dark.snackBg}（面板 ${md3.dark.panel}）` : '');
+  check('悬停是「叠一层文字色的 8%」而不是写死的颜色（M3 状态层）',
+    !!md3.dark && /color-mix/.test(md3.dark.hoverLayer) && /8%/.test(md3.dark.hoverLayer),
+    md3.dark ? `--hover-layer=${md3.dark.hoverLayer}` : '');
+  check('切回普通主题 → 形状与配色回到旧皮肤那套（新样式没污染老主题）',
+    !!md3.legacy && md3.legacy.rBtn === '5px' && md3.legacy.rDialog === '12px'
+      && md3.legacy.panel === '#212734' && md3.legacy.topbarPx <= 48,
+    md3.legacy ? `--r-btn=${md3.legacy.rBtn} --r-dialog=${md3.legacy.rDialog} --panel=${md3.legacy.panel} 顶栏=${md3.legacy.topbarPx}px` : '');
+  check('探针收尾把主题与重点色复原',
+    md3.restored && md3.restored.theme === 'light' && md3.restored.accent === '#1b2a6b',
+    `theme=${md3.restored && md3.restored.theme} accent=${md3.restored && md3.restored.accent}`);
+
+  /* ============================================================ */
   console.log('\n=== 关窗退订 ===');
   const unsub = await run(`(async () => {
     const ap = window.__tl.appearance;
+    // 注意看的是**相对变化**：app 本身常驻了一条订阅（编辑区主题要推给积木画布），
+    // 所以不能拿绝对数 0 / 1 来判 —— 判「开窗 +1、关窗 −1」才是对的
     const before = ap._listeners.size;
     // 用「完成」按钮关窗（第一个 foot 按钮）
     document.querySelector('.modal-back .foot button').click();
@@ -281,14 +521,16 @@ app.whenReady().then(async () => {
     const closed = !document.querySelector('.modal-back');
     const afterClose = ap._listeners.size;
     // 再开一次，确认能重新订阅
-    document.querySelector('#btn-appearance').click();
+    document.querySelector('#btn-settings').click();
     await new Promise(r => setTimeout(r, 220));
     const afterReopen = ap._listeners.size;
     return { before, closed, afterClose, afterReopen };
   })()`);
-  check('关窗后退订（不攒失效回调）', unsub.closed && unsub.afterClose === 0,
-    `开窗前 ${unsub.before} 个监听 → 关窗后 ${unsub.afterClose} 个`);
-  check('重开对话框能重新订阅', unsub.afterReopen === 1, `重开后 ${unsub.afterReopen} 个监听`);
+  check('关窗后退订（不攒失效回调）',
+    unsub.closed && unsub.afterClose === unsub.before - 1,
+    `开窗时 ${unsub.before} 个监听 → 关窗后 ${unsub.afterClose} 个（应当少 1）`);
+  check('重开对话框能重新订阅', unsub.afterReopen === unsub.before,
+    `重开后 ${unsub.afterReopen} 个（应当回到 ${unsub.before}）`);
 
   /* ============================================================ */
   console.log('\n=== 持久化（localStorage，不进项目文件） ===');
@@ -303,8 +545,12 @@ app.whenReady().then(async () => {
   check('项目文件里没有 appearance 字段（皮肤各随各的）',
     !stored.inProject, 'store.toJSON() 不含 appearance');
 
-  win.webContents.reload();
-  await new Promise((r) => setTimeout(r, 2600));
+  // 这里刻意不用 win.webContents.reload()：在 backgroundThrottling: false 的窗口上，
+  // reload() 之后 executeJavaScript 会永久不返回（实测：同一个 builder 用 loadURL 重开就正常）。
+  // 换个 query 重新 load，语义同样是「重新载入」，但不踩那个坑。
+  await win.loadURL(APP_URL + '?again=1');
+  const ready = await waitReady();
+  if (!ready) check('重载后页面回到可用状态', false, '等太久也没看到 __tl 就绪');
   const reloaded = await run(`(() => {
     const cs = getComputedStyle(document.documentElement);
     const el = document.getElementById('tanloom-appearance');
@@ -329,7 +575,7 @@ app.whenReady().then(async () => {
   // (a) 对话框 + 浅色主题：整套外观控件一屏
   const diag = await run(`(async () => {
     document.querySelectorAll('.modal-back').forEach(e => e.remove());
-    document.querySelector('#btn-appearance').click();
+    document.querySelector('#btn-settings').click();
     await new Promise(r => setTimeout(r, 420));
     const cs = (sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el).backgroundColor : '(无)'; };
     const v = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -373,7 +619,7 @@ app.whenReady().then(async () => {
   await run(`(async () => {
     window.__tl.appearance.setTheme('dark');
     await new Promise(r => setTimeout(r, 220));
-    document.querySelector('#btn-appearance').click();
+    document.querySelector('#btn-settings').click();
     await new Promise(r => setTimeout(r, 460));
     const modal = document.querySelector('.modal-back .modal');
     if (modal) modal.scrollTop = modal.scrollHeight;
@@ -399,12 +645,34 @@ app.whenReady().then(async () => {
   await shot(path.join(shotDir, '16-appearance-ui-scale.png'));
   console.log('  已保存 tools/shots/16-appearance-ui-scale.png');
 
+  // (f) Material You：整套配色由重点色这颗种子长出来（青色种子）
+  await run(`(async () => {
+    const ap = window.__tl.appearance;
+    ap.setUiScale('md');
+    ap.setTheme('you-dark'); ap.setAccent('teal');
+    await new Promise(r => setTimeout(r, 520));
+    return 1;
+  })()`);
+  await new Promise((r) => setTimeout(r, 3200));
+  await shot(path.join(shotDir, '17-material-you-dark.png'));
+  console.log('  已保存 tools/shots/17-material-you-dark.png');
+
+  // (g) 同一颗种子换浅色：表面层次、on-color、提示条反色整套反过来
+  await run(`(async () => {
+    window.__tl.appearance.setTheme('you-light');
+    await new Promise(r => setTimeout(r, 520));
+    return 1;
+  })()`);
+  await new Promise((r) => setTimeout(r, 3200));
+  await shot(path.join(shotDir, '18-material-you-light.png'));
+  console.log('  已保存 tools/shots/18-material-you-light.png');
+
   /* ============================================================ */
   console.log('\n=== 恢复默认 ===');
   const reset = await run(`(async () => {
     document.querySelector('#mode-tabs button[data-view="blocks"]').click();
     await new Promise(r => setTimeout(r, 260));
-    document.querySelector('#btn-appearance').click();
+    document.querySelector('#btn-settings').click();
     await new Promise(r => setTimeout(r, 260));
     const modal = document.querySelector('.modal-back');
     const okText = modal.querySelectorAll('.foot button')[1].textContent.trim();
@@ -423,9 +691,10 @@ app.whenReady().then(async () => {
     };
   })()`);
   check('「恢复默认」按钮文字正确', reset.okText === '恢复默认', `按钮＝${reset.okText}`);
-  check('恢复默认后回到暗色 + 非衬线 + 等宽 + 标准字号',
+  check('恢复默认后回到暗色 + 非衬线 + 等宽 + 标准字号（代码区也退回跟随界面主题）',
     reset.state.theme === 'dark' && reset.state.uiFont === 'sans' && reset.state.codeFont === 'mono'
       && reset.state.uiScale === 'md' && reset.state.codeScale === 'md' && reset.state.followSystem === false
+      && reset.state.codeTheme === null
       && reset.dark === '1' && reset.accent === '#4c97ff' && Math.abs(reset.codeFs - 12.5) < 0.05
       && !/Georgia/i.test(reset.fam),
     `state=${JSON.stringify(reset.state)} --accent=${reset.accent} 代码字号=${reset.codeFs}px`);
@@ -443,7 +712,7 @@ app.whenReady().then(async () => {
   await new Promise((r) => setTimeout(r, 320));
   const sysFollow = await run(`(async () => {
     const ap = window.__tl.appearance;
-    document.querySelector('#btn-appearance').click();
+    document.querySelector('#btn-settings').click();
     await new Promise(r => setTimeout(r, 300));
     const modal = document.querySelector('.modal-back');
     const sysBtn = [...modal.querySelectorAll('.ap-theme')].find(b => b.textContent.includes('跟随系统'));
@@ -590,14 +859,20 @@ app.whenReady().then(async () => {
     `theme=${players.theme} 编辑器底色=${players.chrome} 全屏层底色=${players.bg}（残留监听 ${players.listeners} 个）`);
   await run(`window.__tl.appearance.reset()`);
 
-  /* ============================================================ */
-  console.log('\n=== 页面错误 ===');
-  const errs = pageErrors.filter((m) => /uncaught|Invalid|violat|TypeError|Cannot read|before initialization/i.test(m));
-  if (errs.length) errs.slice(0, 12).forEach((m) => console.log('  ' + m));
-  else console.log('  （无）');
+  } catch (err) {
+    check('探针自身没崩（前面某段抛了异常）', false, String((err && err.stack) || err));
+  } finally {
+    /* ============================================================ */
+    console.log('\n=== 页面错误 ===');
+    const errs = pageErrors.filter((m) => /uncaught|Invalid|violat|TypeError|Cannot read|before initialization/i.test(m));
+    if (errs.length) errs.slice(0, 12).forEach((m) => console.log('  ' + m));
+    else console.log('  （无）');
 
-  const bad = results.filter((r) => !r.ok);
-  console.log(`\n=========== ${results.length - bad.length} 通过 / ${bad.length} 失败 ===========`);
-  if (bad.length) bad.forEach((r) => console.log(`  ✖ ${r.name} / ${r.detail}`));
-  app.exit(bad.length ? 1 : 0);
+    // 总结必须写在 finally 里：中途任何一段抛异常，也照样给出结论，
+    // 而不是「日志停在半路、外面只看到进程没了」
+    const bad = results.filter((r) => !r.ok);
+    console.log(`\n=========== ${results.length - bad.length} 通过 / ${bad.length} 失败 ===========`);
+    if (bad.length) bad.forEach((r) => console.log(`  ✖ ${r.name} / ${r.detail}`));
+    app.exit(bad.length ? 1 : 0);
+  }
 });

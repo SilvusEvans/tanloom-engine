@@ -111,6 +111,20 @@ export const HAT_DEFS = [
     args: {},
     annotation: () => ({ tag: 'clone', args: {}, fnName: 'onClone' }),
     doc: '克隆体诞生时触发'
+  },
+  {
+    op: 'OnDestroyed', id: 'hat_destroyed', kind: 'hat', category: 'event',
+    label: '当作为克隆体被删除时',
+    args: {},
+    annotation: () => ({ tag: 'destroyed', args: {}, fnName: 'onDestroyed' }),
+    doc: '克隆体被删除时触发'
+  },
+  {
+    op: 'OnScene', id: 'hat_scene', kind: 'hat', category: 'event',
+    label: '当场景切换时',
+    args: {},
+    annotation: () => ({ tag: 'scene', args: {}, fnName: 'onScene' }),
+    doc: '场景名改变时触发'
   }
 ];
 
@@ -564,15 +578,6 @@ export const STATEMENT_DEFS = [
     args: { ENTITY: A.ent() },
     gen: (n, g) => [`${g.ind()}tl.destroy(${g.ent(n.entity)});`],
     run: (n, c) => { c.rt.destroy(c.ent(n.entity)); }
-  },
-
-  /* ---------------- 代码积木 ---------------- */
-  {
-    op: 'CodeBlockStatement', id: 'code_statement', kind: 'statement', category: 'myblocks',
-    label: '⚙ 执行代码 (CODE)',
-    args: { CODE: A.code('self.x += 10;') },
-    gen: (n, g) => String(n.code || '').split('\n').map((l) => g.ind() + l),
-    run: (n, c) => { c.rt.evalCode(String(n.code || ''), c, false); }
   }
 ];
 
@@ -712,13 +717,7 @@ export const EXPR_DEFS = [
   { op: 'CurrentScene', id: 'game_scene', kind: 'reporter', category: 'game', label: '当前场景名',
     args: {}, gen: () => 'tl.sceneName()', run: (n, c) => c.rt.state.scene },
   { op: 'CloneCount', id: 'game_clones', kind: 'reporter', category: 'game', label: '克隆体数量',
-    args: {}, gen: () => 'tl.cloneCount()', run: (n, c) => c.rt.cloneCount() },
-
-  /* 代码积木 */
-  { op: 'CodeBlock', id: 'code_expr', kind: 'reporter', category: 'myblocks', label: '⚙ 代码表达式 (CODE)',
-    args: { CODE: A.code('self.x + 10') },
-    gen: (n) => `(${n.code || '0'})`,
-    run: (n, c) => c.rt.evalCode(String(n.code || '0'), c, true) }
+    args: {}, gen: () => 'tl.cloneCount()', run: (n, c) => c.rt.cloneCount() }
 ];
 
 /* ------------------------------------------------------------------ */

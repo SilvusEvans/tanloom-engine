@@ -4,22 +4,19 @@
  * ================================================================
  *   node tools/audit-correspondence.mjs
  *
- * 背景：代码视图里写了 parser 认不出的东西，会降级成「代码积木」原样保留
- * （`parser.js` 的设计，刻意不丢信息）。但**由积木自己写出来的代码**不该走到
- * 降级那条路上 —— 那意味着「积木里放得进，代码里回不来」，也就是用户看到的
- * 「有的代码没在积木编辑器里体现」。
+ * 背景：代码视图只接受能映射成纯积木的写法（`parser.js` 已严格化，认不出的
+ * 写法会记诊断并丢弃，不会再降级成「代码积木」）。所以「积木里放得进、代码里
+ * 回不来」这种事不该发生 —— 这正是用户之前看到的「有的代码没在积木编辑器里体现」。
  *
- * 所以这里对每个积木逐个做一次往返：
+ * 这里对每个积木逐个做一次往返：
  *   最小 IR 节点 → codegen → 一段真 .ts → parser → 拿回来的节点
  * 拿回来必须满足三条：
- *   1. 类型相同，且不是 CodeBlock / CodeBlockStatement（那就是降级）
+ *   1. 类型相同（若变成 CodeBlock 之类就是对的写法走丢了）
  *   2. 同 op 家族的判别字段（prop / op 之类）没丢 —— 否则「把 vx 设为」会
  *      变成「把 x 设为」，形状看着像、其实换了块积木
- *   3. 语句积木回**一条**语句（1 积木 ≠ 2 语句），且子树里没有降级
+ *   3. 语句积木回**一条**语句（1 积木 ≠ 2 语句）
  *
- * `CodeBlock` / `CodeBlockStatement` 本身**刻意不参与**：它们的职责就是
- * 「承载认不出来的任意代码」，写回来时如果恰好能认出来，就会被升级成真积木 ——
- * 这是预期行为，不是不一致。
+ * 所有积木都参与 —— 已无「代码积木」这类降级容器需要刻意排除。
  *
  * 也导出 `auditAll()` 给 `tools/test-core.mjs` 用，避免两处逻辑各写一遍。
  */
@@ -31,17 +28,13 @@ import { ALL_DEFS, instantiate } from '../src/core/blockdefs.js';
 
 const ENT = '玩家';
 const VAR = '分数';          // 模板项目里真实存在的变量
-const SKIP = new Set(['CodeBlock', 'CodeBlockStatement']);   // 降级容器，见文件头注释
 
 /* ------------------------------------------------------------------ */
-/* 降级计数                                                            */
+/* 降级计数（已无代码积木容器，恒为 0，仅作兜底断言用）              */
 /* ------------------------------------------------------------------ */
-const isCodeNode = (n) => !!n && SKIP.has(n.type);
-
 function countCode(x, seen = 0) {
   if (!x || typeof x !== 'object') return seen;
   if (Array.isArray(x)) { for (const v of x) seen = countCode(v, seen); return seen; }
-  if (isCodeNode(x)) seen++;
   for (const [k, v] of Object.entries(x)) { if (k !== 'type' && v && typeof v === 'object') seen = countCode(v, seen); }
   return seen;
 }
@@ -135,7 +128,7 @@ export function auditOne(d, over = {}) {
     got = blocks[0];
   }
   if (!got) return { ok: false, why: '没拿到节点', code, diags: res.diagnostics };
-  if (got.type !== node.type || isCodeNode(got)) {
+  if (got.type !== node.type) {
     return { ok: false, code, diags: res.diagnostics, why: `${node.type} → ${got.type}` };
   }
   // 整节点深比较（键序无关）：字段值 / 子表达式 / 家族判别字段一次全覆盖。
@@ -166,7 +159,6 @@ function diffFields(want, got, path = '') {
 export function auditAll() {
   const rows = [];
   for (const d of ALL_DEFS) {
-    if (SKIP.has(d.op)) continue;      // 刻意不参与，见文件头
     for (const c of casesOf(d)) rows.push({ d, c, r: auditOne(d, c.over) });
   }
   const gaps = rows.filter((x) => !x.r.ok);
@@ -196,13 +188,11 @@ const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv
 if (isMain) {
   const { rows, gaps, total, blocks } = auditAll();
   const cls = (pat) => gaps.filter((x) => pat.test(x.r.why || ''));
-  const degraded = cls(/CodeBlock/);
   const shape = cls(/条语句/);
   const field = cls(/字段对不上/);
-  const other = gaps.filter((x) => !degraded.includes(x) && !shape.includes(x) && !field.includes(x));
+  const other = gaps.filter((x) => !shape.includes(x) && !field.includes(x));
 
   console.log(`\n=== 逐个积木 × 逐个取值（${blocks} 块积木 / ${rows.length} 组取值）===`);
-  console.log(`  其中 ${SKIP.size} 块降级容器不参与（CodeBlock / CodeBlockStatement）`);
   console.log(`  通过 ${rows.length - gaps.length} / 失败 ${gaps.length}`);
   const show = (list, title) => {
     if (!list.length) return;
@@ -213,7 +203,6 @@ if (isMain) {
       if (r.diags && r.diags.length) r.diags.slice(0, 2).forEach((x) => console.log(`      · ${x.msg}`));
     }
   };
-  show(degraded, '降级成代码积木（积木里放得进、代码里回不来）');
   show(field, '字段对不上（形状看着像、其实换了块积木）');
   show(shape, '语句条数不对（1 积木 ≠ 1 语句）');
   show(other, '其它');

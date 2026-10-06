@@ -14,6 +14,7 @@
     "bubble": "node tools/electron.cjs tools/probe-bubble.cjs",
     "player": "node tools/electron.cjs tools/probe-player.cjs",
     "theme": "node tools/electron.cjs tools/probe-theme.cjs",
+    "motion": "node tools/electron.cjs tools/probe-motion.cjs",
     "gallery": "node tools/electron.cjs tools/gallery.cjs",
     "probe": "node tools/electron.cjs tools/probe-scratch.cjs",
     "i18n": "node tools/test-i18n.mjs"

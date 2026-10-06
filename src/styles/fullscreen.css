@@ -85,25 +85,5 @@
   font-size: 11px;
 }
 
-/* 顶部工具条上的「新窗口 / 全屏」按钮：稍微显眼一点 */
-.run-group button.player {
-  border-color: #3a4a63;
-  color: #a9e6c8;
-}
-.run-group button.player:hover { background: #1b2a24; border-color: #468260; }
-.run-group button.player.on {
-  background: #123326;
-  border-color: #2fbf7f;
-  color: #b7f4d6;
-}
-
-.run-group button.fullscreen {
-  border-color: #3a4a63;
-  color: #9fc4ff;
-}
-.run-group button.fullscreen:hover { background: #1d2735; border-color: #4d6a99; }
-.run-group button.fullscreen.on {
-  background: #1d3350;
-  border-color: #4C97FF;
-  color: #cfe2ff;
-}
+/* 顶部工具条上的「运行」按钮（它现在负责开独立运行窗口）：
+   「正在窗口里跑」的高亮状态定义在 base.css，跟皮肤走 */

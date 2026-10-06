@@ -15,6 +15,8 @@ app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('no-sandbox');
 app.setPath('userData', path.join(require('os').tmpdir(), 'tanloom-ui'));
+// 每轮干净：上一轮残留的「战斗系统X」会让「新建分类」断言误判成重复
+try { fs.rmSync(path.join(require('os').tmpdir(), 'tanloom-ui'), { recursive: true, force: true }); } catch { /* 没有就正好 */ }
 registerScheme();
 const ROOT = path.join(__dirname, '..');
 
@@ -37,6 +39,15 @@ app.whenReady().then(async () => {
   });
   await win.loadURL(APP_URL);
   await new Promise((r) => setTimeout(r, 2300));
+  // 冷启动时 2300ms 可能不够（scratch-blocks 的 bundle 很大），
+  // 直接执行会读到 window.__tl === undefined 而崩。等它真的就绪再往下。
+  {
+    const end = Date.now() + 20000;
+    while (Date.now() < end) {
+      try { if (await win.webContents.executeJavaScript('!!(window.__tl && window.__tl.store)')) break; } catch { /* 下一拍再来 */ }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
   const run = (js) => win.webContents.executeJavaScript(js);
   // capturePage 第一张常是上一帧，连抓两次取第二张（见技能 offline-electron-app）。
   // 抓不到也不能抛出去：这里是 await 在 async 里，抛出去就是 unhandled rejection，
@@ -251,6 +262,39 @@ app.whenReady().then(async () => {
   })()`);
   check('选择区里没有重复的分类', dup.dup.length === 0,
     dup.dup.length ? `重复：${dup.dup.join(', ')}` : `共 ${dup.rows.length} 个分类`);
+
+  console.log('\n=== 删除实体（层级面板 ✕ + 确认框） ===');
+  const del = await run(`(async () => {
+    const tl = window.__tl;
+    const before = tl.store.project.entities.length;
+    const row = [...document.querySelectorAll('#hierarchy .hier-row')].find(r => r.textContent.includes('金币'));
+    if (!row) return { err: '层级里没有「金币」这一行' };
+    const btn = row.querySelector('.hier-del');
+    if (!btn) return { err: '金币行没有 ✕ 按钮' };
+    btn.click();
+    await new Promise(r => setTimeout(r, 150));
+    const modal = document.querySelector('.modal-back');
+    if (!modal) return { err: '点 ✕ 没弹确认框' };
+    const body = modal.textContent;
+    const delBtn = [...modal.querySelectorAll('.foot button')].find(b => b.textContent.trim() === '删除');
+    if (!delBtn) return { err: '确认框里没有「删除」按钮' };
+    delBtn.click();
+    await new Promise(r => setTimeout(r, 220));
+    const gone = !tl.store.project.entities.find(e => e.name === '金币');
+    const after = tl.store.project.entities.length;
+    tl.store.undo();
+    await new Promise(r => setTimeout(r, 220));
+    const back = !!tl.store.project.entities.find(e => e.name === '金币');
+    return { err: null, before, after, gone, back, body };
+  })()`);
+  check('层级行有 ✕，点它弹出确认框（带实体名）',
+    !del.err && /删除「金币」/.test(del.body || ''),
+    del.err || (del.body || '').replace(/\s+/g, ' ').slice(0, 80));
+  check('点「删除」后实体真的从项目里消失',
+    !del.err && del.gone && del.after === del.before - 1,
+    del.err || `前 ${del.before} 个 → 后 ${del.after} 个`);
+  check('Ctrl+Z 撤销能把它找回来',
+    !del.err && del.back, del.err || '撤销后金币还在吗：' + del.back);
 
   console.log('\n=== 页面错误 ===');
   const errs = pageErrors.filter((m) => /uncaught|Invalid|violat|TypeError|Cannot read|before initialization/i.test(m));

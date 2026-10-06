@@ -310,10 +310,4 @@ export declare const tl: {
 };
 `;
 
-/** 把单个表达式 IR 生成成 TypeScript 表达式（右键「转为代码积木」用） */
-export function exprToCode(project, node) {
-  const g = new Gen(project);
-  return g.e(node);
-}
-
 export const PHASE_DOC = BUILTIN_CHANNELS;

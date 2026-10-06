@@ -5,13 +5,16 @@
   <meta charset="UTF-8" />
   <!-- 积木渲染器（scratch-blocks）通过 tanloom://bundle/ 从 node_modules 加载，
        它和编辑器本体（tanloom://app/）不是同一个来源，所以必须显式放行。
-       脚本仍然只允许本地来源；unsafe-eval 是「代码积木 / 代码视图」本身的能力。 -->
+       脚本仍然只允许本地来源；unsafe-eval 供代码视图的运行时使用。 -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' tanloom://bundle; style-src 'self' 'unsafe-inline' tanloom://bundle; script-src 'self' 'unsafe-eval' tanloom://bundle; img-src 'self' data: blob: tanloom://bundle; media-src 'self' tanloom://bundle; font-src 'self' tanloom://bundle; connect-src 'self' tanloom://bundle;" />
   <title data-i18n="Tanloom Engine · 双模游戏引擎">Tanloom Engine · 双模游戏引擎</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/layout.css" />
   <link rel="stylesheet" href="styles/blocks.css" />
   <link rel="stylesheet" href="styles/fullscreen.css" />
+  <!-- 动效层放在最后：同特异性的规则由它胜出，且它只写过渡与动画，
+       布局、颜色、结构一概不碰（见 docs/motion-m3.md） -->
+  <link rel="stylesheet" href="styles/motion.css" />
 </head>
 
 <body>
@@ -40,12 +43,10 @@
       <div class="spacer"></div>
 
       <div class="run-group">
-        <button id="btn-run" class="run" data-i18n-title="运行 (F5)" title="运行 (F5)">▶ <span data-i18n="运行">运行</span></button>
-        <button id="btn-pause" data-i18n-title="暂停" title="暂停">⏸</button>
+        <button id="btn-run" class="run" data-i18n-title="在独立窗口里运行 (F5)" title="在独立窗口里运行 (F5)">▶ <span data-i18n="运行">运行</span></button>
+        <button id="btn-pause" data-i18n-title="暂停（编辑器里的逐帧调试）" title="暂停（编辑器里的逐帧调试）">⏸</button>
         <button id="btn-step" data-i18n-title="单步推进一帧" title="单步推进一帧">⏭</button>
-        <button id="btn-stop" data-i18n-title="停止" title="停止">⏹</button>
-        <button id="btn-player" class="player" data-i18n-title="在独立窗口里运行 (F6)" title="在独立窗口里运行 (F6)">⧉ <span data-i18n="新窗口">新窗口</span></button>
-        <button id="btn-fullscreen" class="fullscreen" data-i18n-title="全屏游玩 (F11)" title="全屏游玩 (F11)">⛶ <span data-i18n="全屏">全屏</span></button>
+        <button id="btn-stop" data-i18n-title="停止（也会关掉运行窗口）" title="停止（也会关掉运行窗口）">⏹</button>
         <span class="stat" id="stat-fps">— fps</span>
         <span class="stat" id="stat-frame">帧 0</span>
       </div>
@@ -56,7 +57,7 @@
         <button id="btn-open" data-i18n="打开">打开</button>
         <button id="btn-save" data-i18n="保存">保存</button>
         <button id="btn-export" data-i18n="导出代码">导出代码</button>
-        <button id="btn-appearance" title="外观：主题色 / 字体 / 字号 (Ctrl+,)">◐ <span data-i18n="外观">外观</span></button>
+        <button id="btn-settings" title="设置：主题 / 字体 / 语言 / 积木与代码 (Ctrl+,)" data-i18n-title="设置：主题 / 字体 / 语言 / 积木与代码 (Ctrl+,)">⚙ <span data-i18n="设置">设置</span></button>
         <button id="btn-help" title="帮助">?</button>
       </div>
     </header>

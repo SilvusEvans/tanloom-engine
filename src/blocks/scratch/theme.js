@@ -45,7 +45,34 @@ function shift(hex, k) {
  * 用项目里的分类（用户可能改过颜色 / 加过自定义分类）生成主题，
  * 缺门的分类回落到 SHADES，再回落到 Scratch 的默认灰。
  */
-export function buildTheme(project) {
+/**
+ * Scratch 原生那套浅底：积木的明暗关系本来就是按浅设计的，给个默认值。
+ * area 为 null（比如积木总览图）时用它。
+ */
+const CLASSIC_COMPONENTS = {
+  workspaceBackgroundColour: '#F9F9F9',
+  toolboxBackgroundColour: '#FFFFFF',
+  toolboxForegroundColour: '#575E75',
+  flyoutBackgroundColour: '#F9F9F9',
+  flyoutForegroundColour: '#575E75',
+  flyoutOpacity: 1,
+  scrollbarColour: '#CECDCE',
+  scrollbarOpacity: 0.5,
+  insertionMarkerColour: '#000000',
+  insertionMarkerOpacity: 0.2,
+  markerColour: '#4C97FF',
+  cursorColour: '#4C97FF',
+};
+
+/**
+ * 用 project 的分类色 + 编辑区表面色生成主题。
+ *
+ * @param {object} project 项目（分类可能改过颜色 / 加过自定义分类）
+ * @param {?object} area   编辑区表面：{ surface, surfaceAlt, field, border, scroll,
+ *                          fg, fgDim, accent } —— 由 appearance 的 editTheme.ws 给，
+ *                          和代码编辑区是同一份，所以两块编辑区永远同深同浅。
+ */
+export function buildTheme(project, area = null) {
   const blockStyles = {};
   const cats = (project && project.categories) || {};
 
@@ -77,25 +104,38 @@ export function buildTheme(project) {
     blockStyles[id] = blockStyles[id] || { colourPrimary: '#FF8C1A', colourSecondary: '#FF8000', colourTertiary: '#DB6E00' };
   }
 
+  // 输入槽（白方块）也属于编辑区表面 —— 深色主题下必须跟着深，
+  // 否则一小块纯白贴在一整片深色上会很刺眼
+  if (area) {
+    blockStyles.textField = {
+      colourPrimary: area.field,
+      colourSecondary: area.surfaceAlt,
+      colourTertiary: area.border,
+    };
+  }
+
   return Blockly.Theme.defineTheme('tanloom', {
     name: 'Tanloom Engine',
     blockStyles,
-    componentStyles: {
-      // 工作区保持 Scratch 那样的浅色 —— 积木的明暗关系是按浅底设计的，
-      // 放到深色底上会显得发闷。外层的编辑器外壳仍然是深色。
-      workspaceBackgroundColour: '#F9F9F9',
-      toolboxBackgroundColour: '#FFFFFF',
-      toolboxForegroundColour: '#575E75',
-      flyoutBackgroundColour: '#F9F9F9',
-      flyoutForegroundColour: '#575E75',
+    componentStyles: area ? {
+      /*
+       * 共享主题：这里的每一条都来自「编辑区那一套」，
+       * 用户把代码区换成 Solarized Dark，积木画布就在同一个底色上。
+       * 积木本体（分类色）不跟着变 —— 那是 Scratch 官方色，属于语言本身。
+       */
+      workspaceBackgroundColour: area.surface,
+      toolboxBackgroundColour: area.surfaceAlt,
+      toolboxForegroundColour: area.fgDim,
+      flyoutBackgroundColour: area.surfaceAlt,
+      flyoutForegroundColour: area.fgDim,
       flyoutOpacity: 1,
-      scrollbarColour: '#CECDCE',
-      scrollbarOpacity: 0.5,
-      insertionMarkerColour: '#000000',
-      insertionMarkerOpacity: 0.2,
-      markerColour: '#4C97FF',
-      cursorColour: '#4C97FF',
-    },
+      scrollbarColour: area.scroll,
+      scrollbarOpacity: 0.6,
+      insertionMarkerColour: area.fg,
+      insertionMarkerOpacity: 0.22,
+      markerColour: area.accent,
+      cursorColour: area.accent,
+    } : CLASSIC_COMPONENTS,
   });
 }
 

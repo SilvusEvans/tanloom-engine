@@ -76,7 +76,7 @@ export function createTemplateProject() {
       {
         id: uid('script'), hat: { type: 'OnBroadcast', channel: 'update' },
         body: seq([
-          S.code('// 代码积木：直接写 TS，和积木共存\nvars["帧数"] = Math.round(ctx.frame % 1000);'),
+          S.setVar('帧数', E.num(0)),
           { type: 'UISetText', text: E.join(E.join(s('分数 '), bar('分数')), E.join(s('   生命 '), bar('生命'))) }
         ])
       },

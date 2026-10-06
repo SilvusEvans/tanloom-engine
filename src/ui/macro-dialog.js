@@ -60,15 +60,12 @@ function replaceLiterals(root, map) {
 
 const PARAM_NAMES = ['x', 'y', 'z', 'n', 'a', 'b', 'c'];
 
-/** 从零新建时的占位实现：一块可编辑的代码积木，用户就地写 */
+/** 从零新建时的占位实现：一块纯积木（表达式给 0，语句给空栈），用户就地改 */
 function placeholderBody(kind) {
   if (kind === 'expression') {
-    return { type: 'CodeBlock', code: '0', returns: true };
+    return { type: 'Number', value: 0 };
   }
-  const head = kind === 'event'
-    ? t('// 这段是事件积木的默认动作，改成你要的')
-    : t('// 在这里写这个积木做什么');
-  return seq([{ type: 'CodeBlockStatement', code: head + t('\n// 例：self.x += 10;') }]);
+  return seq([]);
 }
 
 /* ================================================================== */
@@ -108,13 +105,13 @@ export function openMacroDialog({ store, macroId, source, onChange }) {
       kindHint = 'statement';
     }
   } else if (source && source.fromScratch) {
-    // 从零新建：给一块可编辑的「代码积木」当实现，用户直接在积木上写
+    // 从零新建：给一块占位积木当实现，用户在积木视图里直接搭
     kindHint = source.kind || 'statement';
     bodyIR = placeholderBody(kindHint);
   } else {
     bodyIR = seq([]);
   }
-  // 占位体还没被用户改过时，切换「类型」要跟着换（表达式返回 CodeBlock，语句用 CodeBlockStatement）
+  // 占位体还没被用户改过时，切换「类型」要跟着换（表达式给 0、语句给空栈）
   let placeholder = !!(source && source.fromScratch);
   const isExprBody = kindHint === 'expression';
 
@@ -132,7 +129,7 @@ export function openMacroDialog({ store, macroId, source, onChange }) {
     const k = getRadio(kind);
     if ((k === 'expression') === isExprBody) return;
     bodyIR = placeholderBody(k);
-    toast(t('实现已经换成对应的占位代码积木，保存后在积木上直接改'), 'info', 3200);
+    toast(t('实现已换成占位积木，保存后在积木视图里直接搭'), 'info', 3200);
   });
 
   const catOpts = Object.values(p.categories).sort((a, b) => (a.order || 0) - (b.order || 0))

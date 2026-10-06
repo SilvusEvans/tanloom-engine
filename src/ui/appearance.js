@@ -16,8 +16,10 @@
  */
 
 import { t, lang, setLang, LANGS } from '../core/i18n.js';
+import { BUILTIN_CATEGORIES, categoryLabel } from '../core/registry.js';
 import { showModal, hint, toast } from './dialogs.js';
 import { highlight } from '../code/editor.js';
+import { md3Scheme, md3Vars, MD3_EASING } from './md3.js';
 
 const KEY = 'tl.appearance.v1';
 const FORMAT = 2;   // 分享码格式版本
@@ -182,7 +184,80 @@ export const THEMES = [
       tok: { kw: '#859900', str: '#2aa198', num: '#d33682', com: '#93a1a1', ann: '#b58900', type: '#268bd2', fn: '#cb4b16' },
     },
   },
+
+  /* --- Material You --- */
+  /*
+   * 这三套不存色板，只存「种子 + 变体」—— 整套配色是算出来的（见 md3.js）。
+   * 而且种子默认就是用户挑的重点色（见 vars()）：
+   * 在 Material You 下换重点色 = 换一整套皮肤，这才是「You」。
+   */
+  {
+    id: 'you-dark', name: t('Material You · 暗'), dark: true,
+    md3: { seed: '#6ea8ff', variant: 'tonalSpot' },
+    vars: { ...DARK },
+  },
+  {
+    id: 'you-light', name: t('Material You · 亮'), dark: false,
+    md3: { seed: '#2f6fd0', variant: 'tonalSpot' },
+    vars: { ...LIGHT },
+  },
+  {
+    id: 'you-vivid', name: t('Material You · 生动'), dark: true,
+    md3: { seed: '#a56bff', variant: 'vibrant' },
+    vars: { ...DARK },
+  },
 ];
+
+/* ------------------------------------------------------------------ */
+/* 代码区主题                                                          */
+/* ------------------------------------------------------------------ */
+/**
+ * 代码编辑器可以另配一套色，不跟着界面主题走。
+ *
+ * 为什么单独给：看代码和用面板是两种场景 —— 有人喜欢界面深色、代码浅色，
+ * 也有人整套统一。每套只写「代码区要用什么」，涵盖底色、光标色和七类 token：
+ *   kw 关键字 / str 字符串 / num 数字 / com 注释 / ann 注解 / type 内置对象 / fn 函数
+ *
+ * codeTheme 为 null 时表示「跟随界面主题」（用当前 THEMES 里的 tok），
+ * 另外挑了某套就整个换掉上面的变量。
+ */
+const CODE_BASE = { kw: '#c792ea', str: '#c3e88d', num: '#f78c6c', com: '#5c6773', ann: '#ffcb6b', type: '#82aaff', fn: '#ffcb6b' };
+
+export const CODE_THEMES = [
+  {
+    id: 'night', name: t('夜幕 · 靛'), dark: true,
+    bg: '#171b24', caret: '#ffffff',
+    tok: { ...CODE_BASE },
+  },
+  {
+    id: 'dracula', name: t('德古拉'), dark: true,
+    bg: '#282a36', caret: '#f8f8f2',
+    tok: { kw: '#ff79c6', str: '#f1fa8c', num: '#bd93f9', com: '#6272a4', ann: '#ffb86c', type: '#8be9fd', fn: '#50fa7b' },
+  },
+  {
+    id: 'solarized-dark', name: t('Solarized · 暗'), dark: true,
+    bg: '#002b36', caret: '#93a1a1',
+    tok: { kw: '#859900', str: '#2aa198', num: '#d33682', com: '#586e75', ann: '#b58900', type: '#268bd2', fn: '#cb4b16' },
+  },
+  {
+    id: 'monokai', name: 'Monokai', dark: true,
+    bg: '#23241f', caret: '#f8f8f2',
+    tok: { kw: '#f92672', str: '#e6db74', num: '#ae81ff', com: '#75715e', ann: '#fd971f', type: '#66d9ef', fn: '#a6e22e' },
+  },
+  {
+    id: 'github-light', name: t('GitHub · 白'), dark: false,
+    bg: '#ffffff', caret: '#24292f',
+    tok: { kw: '#cf222e', str: '#0a3069', num: '#0550ae', com: '#6e7781', ann: '#953800', type: '#0550ae', fn: '#8250df' },
+  },
+  {
+    id: 'paper', name: t('暖阳 · 纸'), dark: false,
+    bg: '#fdf6e3', caret: '#073642',
+    tok: { kw: '#859900', str: '#2aa198', num: '#d33682', com: '#93a1a1', ann: '#b58900', type: '#268bd2', fn: '#cb4b16' },
+  },
+];
+
+/** 「跟随界面主题」也是一个选项（存为 null），下拉里要能看见、能选回去 */
+export const CODE_THEME_AUTO = null;
 
 /* ------------------------------------------------------------------ */
 /* 小工具：颜色                                                        */
@@ -209,6 +284,42 @@ const readableOn = (hex) => {
   if (!c) return '#ffffff';
   return (c[0] * 299 + c[1] * 587 + c[2] * 114) / 1000 > 150 ? '#11161f' : '#ffffff';
 };
+/** 两色按比例混合（tint / shade 都用它） */
+const mix = (a, b, k) => {
+  const x = parseHex(a), y = parseHex(b);
+  if (!x || !y) return a;
+  return toHex(x.map((v, i) => v + (y[i] - v) * k));
+};
+
+/* ------------------------------------------------------------------ */
+/* 编辑区表面：积木画布与代码区共用一套                                  */
+/* ------------------------------------------------------------------ */
+/**
+ * 从底色长出这一层层次 —— 画布 / 工具箱 / 输入槽 / 描边 / 网格 / 滚动条 / 文字。
+ *
+ * 积木工作区和代码编辑区同读这一组，所以两边永远不可能「一个深一个浅」，
+ * 这就是「共享主题」的全部内容：挑一次颜色，两个编辑区一起换掉。
+ *
+ * 注意方向：深底上「往上一层」是掺白，浅底上是掺黑 ——
+ * 拿 lift/sink 两个动词区分，别写成同一个符号的正负值。
+ */
+export function editSurface(bg, dark, accent) {
+  const lift = (k) => mix(bg, '#ffffff', k);
+  const sink = (k) => mix(bg, '#000000', k);
+  return dark
+    ? {
+      surface: bg,
+      surfaceAlt: lift(0.05), field: lift(0.12), border: lift(0.14),
+      grid: lift(0.09), scroll: lift(0.24),
+      fg: '#e6eaf2', fgDim: '#98a2b8', accent: accent || '#4c97ff',
+    }
+    : {
+      surface: bg,
+      surfaceAlt: sink(0.04), field: '#ffffff', border: sink(0.12),
+      grid: sink(0.10), scroll: sink(0.22),
+      fg: '#1d2534', fgDim: '#57617a', accent: accent || '#2f6fd0',
+    };
+}
 
 /* ------------------------------------------------------------------ */
 /* 重点色（覆盖主题自带的 accent）                                      */
@@ -248,9 +359,16 @@ const TOK_MAP = {
   ann: '--tok-ann', type: '--tok-type', fn: '--tok-fn',
 };
 
+const WS_MAP = {
+  surface: '--ws-surface', surfaceAlt: '--ws-surface-alt', field: '--ws-field',
+  border: '--ws-border', grid: '--ws-grid', scroll: '--ws-scroll',
+  fg: '--ws-fg', fgDim: '--ws-fg-dim', accent: '--ws-accent', caret: '--ws-caret',
+};
+
 export const DEFAULT_APPEARANCE = {
   theme: 'dark', accent: null, followSystem: false,
   uiFont: 'sans', codeFont: 'mono', uiScale: 'md', codeScale: 'md',
+  codeTheme: CODE_THEME_AUTO,
 };
 
 /** 认得的字段名（分享码校验用：一个都不认识就当它不是分享码） */
@@ -276,6 +394,9 @@ function coerce(o) {
   if (CODE_FONTS.some((f) => f.id === o.codeFont)) s.codeFont = o.codeFont;
   if (SCALES.some((x) => x.id === o.uiScale)) s.uiScale = o.uiScale;
   if (SCALES.some((x) => x.id === o.codeScale)) s.codeScale = o.codeScale;
+  // 代码区主题：认不出来就退回「跟随界面主题」，而不是整份外观丢掉
+  if (o.codeTheme === CODE_THEME_AUTO) s.codeTheme = CODE_THEME_AUTO;
+  else if (CODE_THEMES.some((x) => x.id === o.codeTheme)) s.codeTheme = o.codeTheme;
   return s;
 }
 
@@ -312,22 +433,73 @@ export class Appearance {
    * 实际生效的主题。开着「跟随系统」时由系统决定；
    * 用户之前选的那套先放着不丢，关掉跟随就回去。
    */
+  /** 实际生效的界面主题（见 this.theme） */
   get theme() {
     if (this.state.followSystem) return find(THEMES, this.systemDark ? 'dark' : 'light', 'dark');
     return find(THEMES, this.state.theme, 'dark');
   }
 
-  /** 当前生效的变量表（主题 + 重点色覆盖） */
-  vars() {
-    const v = { ...this.theme.vars, tok: { ...this.theme.vars.tok } };
+  /**
+   * 实际生效的**编辑区**配色：积木画布与代码区共用这一份。
+   *   bg / caret / tok —— 代码编辑区
+   *   ws                —— 积木画布那一层的层次（见 editSurface）
+   *
+   * codeTheme 为 null ＝ 跟随界面主题（用当前界面主题自带的那一套 token 色和底色）。
+   */
+  get codeTheme() {
+    const own = this.state.codeTheme;
+    let base;
+    if (own) {
+      const c = CODE_THEMES.find((x) => x.id === own);
+      if (c) base = { id: c.id, dark: c.dark, bg: c.bg, caret: c.caret, tok: c.tok };
+    }
+    if (!base) {
+      // 走 vars() 而不是 theme.vars：Material You 那套配色是算出来的，
+      // 只有 vars() 里才有（theme.vars 只是它的底色来源）
+      const v = this.vars();
+      base = { id: null, dark: this.theme.dark, bg: v.codeBg, caret: v.codeCaret, tok: v.tok };
+    }
+    const v = this.vars();
+    return { ...base, ws: { ...editSurface(base.bg, base.dark, v.accent), caret: base.caret } };
+  }
+
+  /** 别名：这两区共用一套，叫「编辑区主题」更贴切 */
+  get editTheme() { return this.codeTheme; }
+
+  /**
+   * 用户挑的重点色（十六进制），没挑（跟随主题）返回 null。
+   * 预设色按它自己的色值算，所以和自定义色走同一条路。
+   */
+  accentHex() {
     const a = this.state.accent;
-    if (typeof a === 'string' && a.startsWith('#')) {
+    if (a == null) return null;
+    if (typeof a === 'string' && a.startsWith('#')) return normHex(a);
+    const p = find(ACCENTS, a, null);
+    return p ? p.c : null;
+  }
+
+  /** 当前生效的变量表（主题 + 重点色覆盖；Material You 下整套由种子算出） */
+  vars() {
+    const th = this.theme;
+    const v = { ...th.vars, tok: { ...th.vars.tok } };
+    const seed = this.accentHex();
+
+    if (th.md3) {
+      // Material You：重点色就是种子，种子长出一整套皮肤
+      const scheme = md3Scheme(seed || th.md3.seed, th.dark, th.md3.variant);
+      Object.assign(v, md3Vars(scheme, th.vars));
+      v.scheme = scheme;   // css() 靠它决定要不要输出 --md-* 角色变量
+      return v;
+    }
+
+    const preset = typeof this.state.accent === 'string' && !this.state.accent.startsWith('#')
+      ? find(ACCENTS, this.state.accent, null)
+      : null;
+    if (preset) {
+      v.accent = preset.c; v.accent2 = preset.c2; v.onAccent = preset.on;
+    } else if (seed) {
       // 自定义色：侧边色按比例调暗，字色按亮度自动选
-      const h = normHex(a);
-      if (h) { v.accent = h; v.accent2 = shade(h, 0.78); v.onAccent = readableOn(h); }
-    } else if (a) {
-      const p = find(ACCENTS, a, null);
-      if (p) { v.accent = p.c; v.accent2 = p.c2; v.onAccent = p.on; }
+      v.accent = seed; v.accent2 = shade(seed, 0.78); v.onAccent = readableOn(seed);
     }
     return v;
   }
@@ -360,6 +532,7 @@ export class Appearance {
   setCodeFont(id) { this.set({ codeFont: id }); }
   setUiScale(id) { this.set({ uiScale: id }); }
   setCodeScale(id) { this.set({ codeScale: id }); }
+  setCodeTheme(id) { this.set({ codeTheme: id === undefined ? CODE_THEME_AUTO : id }); }
   setFollowSystem(on) { this.set({ followSystem: !!on }); }
 
   reset() { this.state = { ...DEFAULT_APPEARANCE }; this.apply(); this.persist(); for (const fn of this._listeners) fn(this.state); }
@@ -384,12 +557,28 @@ export class Appearance {
   /** 编译出变量覆盖的 CSS 文本（探针直接断言它） */
   css() {
     const v = this.vars();
+    const code = this.codeTheme;
     const lines = [];
+    if (v.scheme) lines.push(...md3Css(v.scheme));
+    // 代码区的底色 / 光标色单独由 codeTheme 给，先从界面变量里剔掉再补，
+    // 免得界面主题的那份把代码区的覆盖回去。
+    // wsBg / wsBg2 同理 —— 它们现在就是编辑区的表面色，跟积木画布同源。
     for (const [k, name] of Object.entries(VAR_MAP)) {
+      if (k === 'codeBg' || k === 'codeCaret' || k === 'wsBg' || k === 'wsBg2') continue;
       if (v[k] != null) lines.push(`  ${name}: ${v[k]};`);
     }
+    lines.push(`  ${VAR_MAP.codeBg}: ${code.bg};`);
+    lines.push(`  ${VAR_MAP.codeCaret}: ${code.caret};`);
+    lines.push(`  ${VAR_MAP.wsBg}: ${code.ws.surface};`);
+    lines.push(`  ${VAR_MAP.wsBg2}: ${code.ws.surfaceAlt};`);
+    // 积木画布那一层的层次：scratch-blocks 的主题不读 CSS 变量，
+    // 这些是给布局壳（工具箱边框、滚动条）用的，积木本体由 setTheme 推下去
+    for (const [k, name] of Object.entries(WS_MAP)) {
+      if (code.ws[k] != null) lines.push(`  ${name}: ${code.ws[k]};`);
+    }
+    // token 色同理：整组来自代码区主题
     for (const [k, name] of Object.entries(TOK_MAP)) {
-      if (v.tok[k] != null) lines.push(`  ${name}: ${v.tok[k]};`);
+      if (code.tok[k] != null) lines.push(`  ${name}: ${code.tok[k]};`);
     }
     lines.push(`  --ui: ${find(UI_FONTS, this.state.uiFont, 'sans').stack};`);
     lines.push(`  --mono: ${find(CODE_FONTS, this.state.codeFont, 'mono').stack};`);
@@ -414,6 +603,115 @@ export class Appearance {
 }
 
 /* ------------------------------------------------------------------ */
+/* Material You：编译成变量                                            */
+/* ------------------------------------------------------------------ */
+/**
+ * 除了上面那套通用变量，Material You 还要额外输出三组东西：
+ *
+ *   --md-*       M3 角色色（primary / surface 容器 / outline / inverse …）
+ *                样式表里凡是「这块是主色容器」「这是描边」的地方都读它
+ *   --btn-* / --chip-* / --card-* …
+ *                组件变量：普通主题在 base.css 里就有等价兜底，这里整套换掉
+ *   --r-* / --topbar-h
+ *                形状：M3 的圆角是分档的（输入框 8、卡片 12、对话框 28、按钮全圆）
+ *
+ * 全部只在 Material You 主题下输出 —— 别的主题继续用 base.css 里那份兜底，
+ * 所以旧皮肤一眼都不会变。
+ */
+function md3Css(m) {
+  const L = [];
+  const put = (name, val) => { if (val != null) L.push(`  ${name}: ${val};`); };
+
+  /* --- 角色色 --- */
+  put('--md-primary', m.primary);
+  put('--md-on-primary', m.onPrimary);
+  put('--md-primary-container', m.primaryContainer);
+  put('--md-on-primary-container', m.onPrimaryContainer);
+  put('--md-secondary', m.secondary);
+  put('--md-on-secondary', m.onSecondary);
+  put('--md-secondary-container', m.secondaryContainer);
+  put('--md-on-secondary-container', m.onSecondaryContainer);
+  put('--md-tertiary', m.tertiary);
+  put('--md-on-tertiary', m.onTertiary);
+  put('--md-tertiary-container', m.tertiaryContainer);
+  put('--md-on-tertiary-container', m.onTertiaryContainer);
+  put('--md-error', m.error);
+  put('--md-on-error', m.onError);
+  put('--md-error-container', m.errorContainer);
+  put('--md-on-error-container', m.onErrorContainer);
+  put('--md-background', m.background);
+  put('--md-on-background', m.onBackground);
+  put('--md-surface', m.surface);
+  put('--md-on-surface', m.onSurface);
+  put('--md-surface-variant', m.surfaceVariant);
+  put('--md-on-surface-variant', m.onSurfaceVariant);
+  put('--md-surface-lowest', m.surfaceContainerLowest);
+  put('--md-surface-low', m.surfaceContainerLow);
+  put('--md-surface-container', m.surfaceContainer);
+  put('--md-surface-high', m.surfaceContainerHigh);
+  put('--md-surface-highest', m.surfaceContainerHighest);
+  put('--md-surface-dim', m.surfaceDim);
+  put('--md-surface-bright', m.surfaceBright);
+  put('--md-outline', m.outline);
+  put('--md-outline-variant', m.outlineVariant);
+  put('--md-inverse-surface', m.inverseSurface);
+  put('--md-inverse-on-surface', m.inverseOnSurface);
+  put('--md-inverse-primary', m.inversePrimary);
+  put('--md-scrim', m.dark ? 'rgba(0, 0, 0, .58)' : 'rgba(24, 28, 33, .34)');
+
+  /* --- 组件：一律换成 M3 的角色色 --- */
+  put('--btn-bg', m.secondaryContainer);
+  put('--btn-fg', m.onSecondaryContainer);
+  put('--btn-bd', 'transparent');
+  put('--chip-bg', m.secondaryContainer);
+  put('--chip-fg', m.onSecondaryContainer);
+  put('--chip-bd', 'transparent');
+  put('--tab-bg', m.surfaceContainerHigh);
+  put('--tab-bg-active', m.secondaryContainer);
+  put('--tab-fg-active', m.onSecondaryContainer);
+  put('--item-bg-active', m.secondaryContainer);
+  put('--item-fg-active', m.onSecondaryContainer);
+  put('--card-bg', m.surfaceContainerLow);
+  put('--card-bd', 'transparent');
+  put('--field-bg', m.surfaceContainerHighest);
+  put('--field-bd', 'transparent');
+  put('--field-bd-focus', m.primary);
+  put('--modal-bg', m.surfaceContainerHigh);
+  put('--modal-bd', 'transparent');
+  put('--menu-bg', m.surfaceContainer);
+  put('--menu-bd', 'transparent');
+  // 提示条是 M3 的 snackbar：用反色块，颜色跟深浅模式反过来
+  put('--snack-bg', m.inverseSurface);
+  put('--snack-fg', m.inverseOnSurface);
+  put('--snack-bd', m.inversePrimary);
+  put('--snack-ok', m.inverseSem.ok);
+  put('--snack-warn', m.inverseSem.warn);
+  put('--snack-err', m.inverseSem.err);
+  put('--topbar-bd', 'transparent');
+  // 状态层：M3 的 hover / pressed 是「在容器色上叠一层文字色的 8% / 12%」
+  put('--hover-layer', `color-mix(in srgb, ${m.onSurface} 8%, transparent)`);
+  put('--press-layer', `color-mix(in srgb, ${m.onSurface} 12%, transparent)`);
+  put('--accent-soft', `color-mix(in srgb, ${m.primary} 14%, transparent)`);
+
+  /* --- 形状 --- */
+  put('--radius', '16px');
+  put('--radius-sm', '8px');
+  put('--r-btn', '999px');
+  put('--r-card', '12px');
+  put('--r-item', '999px');
+  put('--r-menu', '12px');
+  put('--r-dialog', '28px');
+  put('--r-chip', '8px');
+  put('--r-field', '8px');
+  put('--r-canvas', '12px');
+  put('--r-pill', '999px');
+  // M3 的顶栏比常规高一档（52 vs 46），呼吸感主要来自这里
+  put('--topbar-h', '52px');
+  put('--ease', MD3_EASING);
+  return L;
+}
+
+/* ------------------------------------------------------------------ */
 /* 设置对话框                                                          */
 /* ------------------------------------------------------------------ */
 function swatchStrip(v) {
@@ -427,7 +725,7 @@ function swatchStrip(v) {
   return strip;
 }
 
-export function openAppearanceDialog(app) {
+export function openSettingsDialog(app) {
   const body = document.createElement('div');
   body.className = 'ap-body';
 
@@ -453,16 +751,18 @@ export function openAppearanceDialog(app) {
   grid.appendChild(sysBtn);
 
   const themeBtns = new Map();
-  for (const t of THEMES) {
+  for (const th of THEMES) {
     const b = document.createElement('button');
     b.className = 'ap-theme';
-    b.appendChild(swatchStrip(t.vars));
+    // Material You 的色板是算出来的：得先算一遍，卡片上那四格才是真的那套色
+    const shown = th.md3 ? md3Vars(md3Scheme(th.md3.seed, th.dark, th.md3.variant), th.vars) : th.vars;
+    b.appendChild(swatchStrip(shown));
     const nm = document.createElement('span');
     nm.className = 'ap-name';
-    nm.textContent = t.name;
+    nm.textContent = th.name;
     b.appendChild(nm);
-    b.addEventListener('click', () => app.setTheme(t.id));
-    themeBtns.set(t.id, b);
+    b.addEventListener('click', () => app.setTheme(th.id));
+    themeBtns.set(th.id, b);
     grid.appendChild(b);
   }
   tSec.appendChild(grid);
@@ -523,6 +823,7 @@ export function openAppearanceDialog(app) {
   customHex.className = 'ap-hex';
   dots.appendChild(customHex);
   aSec.appendChild(dots);
+  aSec.appendChild(hint(t('在 Material You 主题下，重点色就是「种子」—— 换一个颜色，整套界面会照着它重新长一遍。')));
   body.appendChild(aSec);
 
   /* --- 字体与字号 --- */
@@ -539,10 +840,33 @@ export function openAppearanceDialog(app) {
   fSec.appendChild(fieldRow(t('代码字号'), codeScaleSel));
   body.appendChild(fSec);
 
-  /* --- 实时预览：用的就是编辑器自己的高亮函数和 class --- */
-  const pSec = document.createElement('div');
-  pSec.className = 'ap-section';
-  pSec.appendChild(sectionLabel(t('预览')));
+  /* --- 积木与代码：共用一套编辑区主题 --- */
+  const cSec = document.createElement('div');
+  cSec.className = 'ap-section';
+  cSec.appendChild(sectionLabel(t('积木与代码')));
+  // 「跟随界面主题」也是一个选项（内部存 null），跟具体主题并列让用户能选回去
+  const codeThemeSel = selectOf(
+    [{ id: '', name: t('跟随界面主题') }, ...CODE_THEMES.map((x) => ({ id: x.id, name: x.name }))],
+    'ap-sel-code-theme'
+  );
+  codeThemeSel.addEventListener('change', () => app.setCodeTheme(codeThemeSel.value || CODE_THEME_AUTO));
+  cSec.appendChild(fieldRow(t('编辑区主题'), codeThemeSel));
+  cSec.appendChild(hint(t('积木画布和代码区共用这一套：换一个，两个编辑区一起变，不会一个深一个浅。')));
+
+  /* --- 实时预览：左边是积木在这个表面上的样子，右边是代码 --- */
+  const prevWrap = document.createElement('div');
+  prevWrap.className = 'ap-preview-wrap';
+  const blocksPrev = document.createElement('div');
+  blocksPrev.className = 'ap-preview-blocks';
+  for (const c of BUILTIN_CATEGORIES.slice(0, 4)) {
+    const b = document.createElement('span');
+    b.className = 'ap-pb';
+    b.style.background = c.color;
+    b.style.borderColor = c.dark;
+    b.textContent = categoryLabel(c);
+    blocksPrev.appendChild(b);
+  }
+  prevWrap.appendChild(blocksPrev);
   const pre = document.createElement('pre');
   pre.className = 'ap-preview';
   pre.innerHTML = highlight([
@@ -551,8 +875,9 @@ export function openAppearanceDialog(app) {
     t('tl.move(speed, 0);   // 注释'),
     "if (vars.hp <= 0) tl.broadcast('game over');",
   ].join('\n'));
-  pSec.appendChild(pre);
-  body.appendChild(pSec);
+  prevWrap.appendChild(pre);
+  cSec.appendChild(prevWrap);
+  body.appendChild(cSec);
 
   /* --- 分享码 --- */
   const sSec = document.createElement('div');
@@ -588,8 +913,8 @@ export function openAppearanceDialog(app) {
   body.appendChild(sSec);
 
   body.appendChild(hint(
-    t('外观只影响编辑器界面，不会写进项目文件 —— 换台机器打开同一个游戏，样式各自保留。<br>') +
-    t('积木颜色是 Scratch 官方分类色，不跟着换；独立运行窗口和全屏游玩也保持深色，那是游戏画面。')
+    t('这些都是编辑器自己的偏好，不会写进项目文件 —— 换台机器打开同一个游戏，样式各自保留。<br>') +
+    t('积木画布与代码区共用「编辑区主题」，不选就是跟随界面主题；积木本身的分类色是 Scratch 官方色，不跟着换。')
   ));
 
   const sync = () => {
@@ -617,6 +942,7 @@ export function openAppearanceDialog(app) {
     codeSel.value = app.state.codeFont;
     uiScaleSel.value = app.state.uiScale;
     codeScaleSel.value = app.state.codeScale;
+    codeThemeSel.value = app.state.codeTheme || '';
   };
   uiSel.addEventListener('change', () => app.setUiFont(uiSel.value));
   codeSel.addEventListener('change', () => app.setCodeFont(codeSel.value));
@@ -625,7 +951,7 @@ export function openAppearanceDialog(app) {
 
   let off = null;
   return showModal({
-    title: t('外观 · 编辑器'),
+    title: t('设置 · 编辑器'),
     body,
     width: 600,
     cancelText: t('完成'),
@@ -637,6 +963,9 @@ export function openAppearanceDialog(app) {
     onClose: () => { if (off) off(); },
   });
 }
+
+/** 旧名：探针和历史调用点还在用它 */
+export const openAppearanceDialog = openSettingsDialog;
 
 function sectionLabel(text) {
   const d = document.createElement('div');

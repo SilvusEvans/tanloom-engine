@@ -2,8 +2,9 @@
  * Tanloom Engine — 代码 → IR 反向解析
  * ================================================================
  * 只解析 codegen 生成的「受限 TypeScript 子集」。
- * 关键设计：遇到不认识的语句/表达式时，降级成「代码积木」(CodeBlock)，
- * 原样保留源码 —— 这样任何写法都能无损往返，IR 永远不会丢信息。
+ * 严格化：遇到不认识的语句/表达式时，记录一条诊断并丢弃 —— 不再降级成
+ * 「代码积木」(CodeBlock)。代码视图只接受能映射成纯积木的写法，认不出的
+ * 代码会在诊断里报错，而不是静默变成一块「执行代码」。
  *
  * 注解是双向同步的锚点：
  *   // @on update            → 帽块「当收到 [update]」
@@ -189,7 +190,7 @@ function parsePostfix(p) {
     if (p.isPunc('++') || p.isPunc('--')) {
       // 后缀自增/自减。目前只有 codegen 给「重复 N 次」生成的
       // `for (let i = 0; i < N; i++)` 会用到它 —— 少了这一条，那条 for 会被
-      // 解析成代码积木，于是「重复 N 次」在积木视图里就变成「执行代码」。
+      // 当成无法识别的写法而报错丢弃，「重复 N 次」也就回不来。
       const tok = p.take();
       node = { k: 'un', op: tok.value, x: node, post: true, start: nodeStart(node), end: tok.end };
       continue;
@@ -211,7 +212,7 @@ function parsePrimary(p) {
     }
     p.take();
     if (p.isPunc('=>')) {
-      // 箭头函数：整体当作不可解析，交给代码积木
+      // 箭头函数：整体当作不可解析，报错丢弃
       const body = parseArrowBody(p);
       return { k: 'raw', src: p.slice(t.start, nodeEnd(body)), start: t.start, end: nodeEnd(body) };
     }
@@ -408,8 +409,8 @@ function normCmp(op) {
   return op;
 }
 
-function makeCtx(project) {
-  return { project, macroByFn: buildMacroFnIndex(project) };
+function makeCtx(project, diag) {
+  return { project, macroByFn: buildMacroFnIndex(project), diag: diag || [] };
 }
 
 function buildMacroFnIndex(project) {
@@ -432,25 +433,33 @@ function astToIR(n, P, ctx) {
     case 'un':
       if (n.op === '-') return { type: 'Neg', a: astToIR(n.x, P, ctx) };
       if (n.op === '!') return { type: 'Not', a: astToIR(n.x, P, ctx) };
-      return code(n, P);
+      return code(n, P, ctx);
     case 'bin': {
       const l = astToIR(n.l, P, ctx), r = astToIR(n.r, P, ctx);
       if (n.op === '&&') return { type: 'Logic', op: 'and', left: l, right: r };
       if (n.op === '||') return { type: 'Logic', op: 'or', left: l, right: r };
       if (CMP_OPS.has(n.op)) return { type: 'Compare', op: normCmp(n.op), left: l, right: r };
       if (['+', '-', '*', '/', '%'].includes(n.op)) return { type: 'BinaryOp', op: n.op === '%' ? '%' : n.op, left: l, right: r };
-      return code(n, P);
+      return code(n, P, ctx);
     }
     case 'member': case 'idx': return memberToIR(n, P, ctx);
     case 'call': return callToIR(n, P, ctx);
-    case 'raw': return code(n, P);
-    case 'id': return code(n, P);
-    default: return code(n, P);
+    case 'raw': return code(n, P, ctx);
+    case 'id': return code(n, P, ctx);
+    default: return code(n, P, ctx);
   }
 }
 
-function code(n, P) { return { type: 'CodeBlock', code: srcOf(n, P), returns: true }; }
-function codeStmt(n, P) { return { type: 'CodeBlockStatement', code: srcOf(n, P) }; }
+function ctxDiag(ctx, n, P, msg) {
+  const src = srcOf(n, P);
+  const line = (n && typeof n.start === 'number') ? P.src.slice(0, n.start).split('\n').length : 0;
+  if (ctx && ctx.diag) ctx.diag.push({ line, msg: msg + (src ? '：' + src : '') });
+}
+
+/** 严格化：不认识的写法不再降级成代码积木，而是报错并丢弃。
+ * 表达式位上至少得有个合法节点，所以回退成 Number(0)；语句位上直接丢弃（返回 null）。 */
+function code(n, P, ctx) { ctxDiag(ctx, n, P, t('无法识别的表达式，已忽略')); return E.num(0); }
+function codeStmt(n, P, ctx) { ctxDiag(ctx, n, P, t('无法识别的语句，已忽略')); return null; }
 function srcOf(n, P) {
   if (n && n.src !== undefined) return n.src;
   if (!n || !P) return '';
@@ -483,7 +492,7 @@ function memberToIR(n, P, ctx) {
   }
   // 列表表达式：lists.存档点[2 - 1] → 第 (2) 项；lists.存档点.length → 长度
   // （这两条对应 codegen 里 ListItem / ListLength 的写法，缺了它们这两块积木
-  //   一进代码视图再回来就变成代码积木）
+  //   一进代码视图再回来就对不上）
   if (n.k === 'idx') {
     const list = listNameOf(n.obj);
     if (list) return { type: 'ListItem', list, i: astToIR(oneBased(n.index), P, ctx) };
@@ -492,7 +501,7 @@ function memberToIR(n, P, ctx) {
     const list = listNameOf(n.obj);
     if (list) return { type: 'ListLength', list };
   }
-  return code(n, P);
+  return code(n, P, ctx);
 }
 
 function callToIR(n, P, ctx) {
@@ -539,7 +548,7 @@ function callToIR(n, P, ctx) {
     const m = ctx.macroByFn.get(simple);
     return { type: 'MacroCall', macroId: m.id, args: n.args.map((a) => astToIR(a, P, ctx)) };
   }
-  return code(n, P);
+  return code(n, P, ctx);
 }
 
 function stmtToIR(s, P, ctx) {
@@ -566,7 +575,7 @@ function stmtToIR(s, P, ctx) {
         const m = ctx.macroByFn.get(v.callee.name);
         return { type: 'MacroCallStatement', macroId: m.id, args: macroArgs(v, m, P, ctx) };
       }
-      return codeStmt(s, P);
+      return codeStmt(s, P, ctx);
     }
     case 'if': {
       const cond = astToIR(s.cond, P, ctx);
@@ -587,22 +596,26 @@ function stmtToIR(s, P, ctx) {
         s.cond && s.cond.k === 'bin' && s.cond.op === '<' && s.update && s.update.k === 'un' && s.update.op === '++') {
         return { type: 'Repeat', times: astToIR(s.cond.r, P, ctx), body: seq(blockToIR(s.body, P, ctx)) };
       }
-      return codeStmt(s, P);
+      return codeStmt(s, P, ctx);
     }
     case 'exprstmt': {
       const e = s.expr;
       if (e.k === 'assign') return assignToIR(e, P, ctx);
       if (e.k === 'call') return callStmtToIR(e, s, P, ctx);
-      return codeStmt(s, P);
+      return codeStmt(s, P, ctx);
     }
-    default: return codeStmt(s, P);
+    default: return codeStmt(s, P, ctx);
   }
 }
 
 function macroArgs(v, m, P, ctx) {
-  const all = v.args.map((a) => astToIR(a, P, ctx));
-  if (m.kind === 'statement' && all.length && isSelfExpr(v.args[0])) return all.slice(1);
-  return all;
+  // 语句型宏按约定以 self 作为第一个参数（实体），codegen 也这么写。
+  // 它不参与反解，应在解析前就跳过 —— 否则 bare `self` 会被当成语意不明的
+  // 标识符记一条「无法识别的表达式」诊断（其实是预期的实体占位）。
+  const args = (m.kind === 'statement' && v.args.length && isSelfExpr(v.args[0]))
+    ? v.args.slice(1)
+    : v.args;
+  return args.map((a) => astToIR(a, P, ctx));
 }
 function isSelfExpr(a) {
   return a && a.k === 'id' && a.name === 'self';
@@ -684,7 +697,7 @@ function assignToIR(e, P, ctx) {
       // （`fieldOut` 拿到对象 → "[object Object]"）。
       if (prop === 'color') {
         const c = strLitOf(e.value);
-        if (c === null) return codeStmt(e, P);
+        if (c === null) return codeStmt(e, P, ctx);
         return { type: 'SetColor', entity: '$self', color: c };
       }
       if (prop === 'vx' || prop === 'vy') return { type: 'SetProp', entity: '$self', prop, value: v };
@@ -694,7 +707,7 @@ function assignToIR(e, P, ctx) {
       }
       if (prop === 'anim') {
         const nm = strLitOf(e.value);
-        if (nm === null) return codeStmt(e, P);   // 不是字面量就别瞎猜成 idle，原样留成代码积木
+        if (nm === null) return codeStmt(e, P, ctx);   // 不是字面量就别瞎猜成 idle，严格化下直接报错丢弃
         return { type: 'PlayAnimation', entity: '$self', name: nm };
       }
       if (prop === 'gravity') return { type: 'SetGravity', entity: '$self', g: v };
@@ -722,12 +735,12 @@ function assignToIR(e, P, ctx) {
       if (prop === 'opacity') return { type: 'SetOpacity', entity: ref, op: v };
       if (prop === 'color') {
         const c = strLitOf(e.value);
-        if (c === null) return codeStmt(e, P);      // 颜色字段要的是裸字符串，不是表达式
+        if (c === null) return codeStmt(e, P, ctx);      // 颜色字段要的是裸字符串，不是表达式
         return { type: 'SetColor', entity: ref, color: c };
       }
       if (prop === 'anim') {
         const nm = strLitOf(e.value);
-        if (nm === null) return codeStmt(e, P);
+        if (nm === null) return codeStmt(e, P, ctx);
         return { type: 'PlayAnimation', entity: ref, name: nm };
       }
       if (prop === 'gravity') return { type: 'SetGravity', entity: ref, g: v };
@@ -735,7 +748,7 @@ function assignToIR(e, P, ctx) {
       return { type: 'SetProp', entity: ref, prop, value: v };
     }
   }
-  return codeStmt(e, P);
+  return codeStmt(e, P, ctx);
 }
 
 function callStmtToIR(e, s, P, ctx) {
@@ -778,9 +791,9 @@ function callStmtToIR(e, s, P, ctx) {
     case 'tl.stop': return { type: 'StopScripts', target: S(0) || 'all' };
     case 'tl.setSubscribed': {
       // 第二个参数生成的是 true / false 字面量。写成别的（变量、表达式）就映射不回来，
-      // 那就降级成代码积木原样保留 —— 不丢信息是硬规矩。
+      // 那就报错丢弃（严格化，不再保留代码积木）。
       const flag = e.args[1];
-      if (!flag || flag.k !== 'bool') return codeStmt(e, P);
+      if (!flag || flag.k !== 'bool') return codeStmt(e, P, ctx);
       return { type: 'SetSubscribed', channel: S(0) || 'update', state: flag.v ? 'subscribe' : 'unsubscribe' };
     }
     case 'tl.setProp': return { type: 'SetProp', entity: entAt(0), prop: S(1) || 'x', value: A(2) };
@@ -789,7 +802,7 @@ function callStmtToIR(e, s, P, ctx) {
 
   // 列表的调用形态：lists.存档点.push(v) / .splice(i - 1, 1) / .splice(i - 1, 0, v)
   // 这三种是 codegen 给 ListAdd / ListDelete / ListInsert 生成的写法。
-  // 认不出来就落到 codeStmt 降级 —— 但由积木生成的代码不该走到那一步。
+  // 认不出来就报错丢弃 —— 但由积木生成的代码不该走到那一步。
   if (e.callee.k === 'member') {
     const list = listNameOf(e.callee.obj);
     if (list) {
@@ -813,7 +826,7 @@ function callStmtToIR(e, s, P, ctx) {
     const m = ctx.macroByFn.get(e.callee.name);
     return { type: 'MacroCallStatement', macroId: m.id, args: macroArgs(e, m, P, ctx) };
   }
-  return codeStmt(e, P);
+  return codeStmt(e, P, ctx);
 }
 
 function exprToIRStrict(ast, P, ctx) {
@@ -827,6 +840,8 @@ function exprToIRStrict(ast, P, ctx) {
 const HAT_FROM_TAG = {
   start: () => ({ type: 'OnStart' }),
   clone: () => ({ type: 'OnClone' }),
+  destroyed: () => ({ type: 'OnDestroyed' }),
+  scene: () => ({ type: 'OnScene' }),
   update: () => ({ type: 'OnBroadcast', channel: 'update' }),
   frame_start: () => ({ type: 'OnBroadcast', channel: 'frame_start' }),
   input: () => ({ type: 'OnBroadcast', channel: 'input' }),
@@ -888,11 +903,11 @@ function hatFromAnnotation(tag, args) {
  * @returns {{ ok, scripts, macros, diagnostics, entityName }}
  */
 export function parseFile(text, opts = {}) {
-  const ctx = makeCtx(opts.project || { macros: {} });
+  const diagnostics = [];
+  const ctx = makeCtx(opts.project || { macros: {} }, diagnostics);
   const p = new P(text);
   const scripts = [];
   const macros = [];
-  const diagnostics = [];
 
   for (;;) {
     // 1) 收集紧邻的注释块（注解锚点）

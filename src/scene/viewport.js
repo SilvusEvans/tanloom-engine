@@ -44,7 +44,7 @@ export class StageView {
       const p = this.toStage(e);
       r.input.mouseDown = true;
       r.input.mouseX = p.x; r.input.mouseY = p.y;
-      if (r.isRunning()) r.clickAt(p.x, p.y);
+      if (r.isRunning()) r.queueClick(p.x, p.y);
       else {
         const hit = this.pickFromProject(p.x, p.y);
         if (hit && this.onPick) this.onPick(hit.id);

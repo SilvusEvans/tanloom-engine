@@ -16,7 +16,7 @@
 .blocklyToolboxDiv::-webkit-scrollbar,
 .blocklyFlyoutScrollbar::-webkit-scrollbar { width: 8px; }
 .blocklyToolboxDiv::-webkit-scrollbar-thumb,
-.blocklyFlyoutScrollbar::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .18); border-radius: 4px; }
+.blocklyFlyoutScrollbar::-webkit-scrollbar-thumb { background: var(--ws-scroll); border-radius: 4px; }
 
 /* 舞台画布 */
 #stage-canvas, #stage-canvas-big { image-rendering: auto; }

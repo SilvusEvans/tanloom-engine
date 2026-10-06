@@ -5,8 +5,8 @@
  */
 
 import { t } from '../core/i18n.js';
-import { BUILTIN_CHANNELS, categoryLabel } from '../core/registry.js';
-import { showMenu, showInlineInput, toast } from './dialogs.js';
+import { BUILTIN_CHANNELS, INTERNAL_CHANNELS, channelKind, categoryLabel } from '../core/registry.js';
+import { showMenu, showInlineInput, showModal, hint, toast } from './dialogs.js';
 import { SHAPE_OPTIONS } from './macro-dialog.js';
 
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -36,10 +36,13 @@ export function renderBroadcast(el, store, rt) {
   const evs = (rt.broadcastLog || []).slice(-24).reverse();
   if (!evs.length) html += t('<div class="log-line info">（运行后这里会实时列出广播事件）</div>');
   for (const e of evs) {
-    const isPhase = BUILTIN_CHANNELS.some((c) => c.name === e.channel);
+    const kind = channelKind(e.channel);
+    const kindText = kind === 'phase' ? t('阶段广播')
+      : kind === 'event' ? t('事件')
+        : t('来自 {_1} · 参数 {_2} · {_3} 个订阅者', { _1: esc(e.source), _2: e.value, _3: e.count });
     html += t('<div class="log-line bus"><span class="f">帧 {_1}</span>', { _1: e.frame }) +
       `<span class="ch">${esc(e.channel)}</span>` +
-      `<span>${isPhase ? t('阶段广播') : t('来自 {_1} · 参数 {_2} · {_3} 个订阅者', { _1: esc(e.source), _2: e.value, _3: e.count })}</span></div>`;
+      `<span>${kindText}</span></div>`;
   }
   el.innerHTML = html;
 }
@@ -50,15 +53,15 @@ export function renderBroadcast(el, store, rt) {
 export function renderSubscribers(el, store, rt, onJump) {
   const rtObj = rt;
   const channels = [];
-  for (const c of BUILTIN_CHANNELS) channels.push({ name: c.name, order: c.order, builtin: true, doc: c.doc });
+  for (const c of BUILTIN_CHANNELS) channels.push({ name: c.name, order: c.order, builtin: true, kind: 'phase', doc: c.doc });
+  for (const c of INTERNAL_CHANNELS) channels.push({ name: c.name, order: c.order, builtin: true, kind: c.kind, doc: c.doc });
   for (const c of Object.values(store.project.channels || {})) {
-    if (!c.builtin) channels.push({ name: c.name, order: c.order || 100, builtin: false, doc: c.doc || '' });
+    if (!c.builtin) channels.push({ name: c.name, order: c.order || 100, builtin: false, kind: 'user', doc: c.doc || '' });
   }
   channels.sort((a, b) => (a.order - b.order) || a.name.localeCompare(b.name));
   // 运行时可能自动注册了新频道
   for (const n of Object.keys(rtObj._subByChannel || {})) {
-    if (n.startsWith('_')) continue;
-    if (!channels.find((c) => c.name === n)) channels.push({ name: n, order: 999, builtin: false, doc: '' });
+    if (!channels.find((c) => c.name === n)) channels.push({ name: n, order: 999, builtin: false, kind: 'user', doc: '' });
   }
 
   el.innerHTML = '';
@@ -71,7 +74,12 @@ export function renderSubscribers(el, store, rt, onJump) {
     const head = document.createElement('div');
     head.className = 'ch';
     const mutedCount = subs.filter((s) => s.muted).length;
-    head.innerHTML = t('{_1} <span class="badge">{_2} · {_3} 个订阅者', { _1: esc(ch.name), _2: ch.builtin ? t('内置') : t('自定义'), _3: subs.length })
+    const kindLabel = ch.kind === 'phase' ? t('阶段')
+      : ch.kind === 'lifecycle' ? t('生命周期')
+        : ch.kind === 'input' ? t('输入')
+          : ch.kind === 'physics' ? t('物理')
+            : ch.builtin ? t('内置') : t('自定义');
+    head.innerHTML = t('{_1} <span class="badge">{_2} · {_3} 个订阅者', { _1: esc(ch.name), _2: kindLabel, _3: subs.length })
       + `${mutedCount ? ` · <b class="muted">${mutedCount} 个已取消订阅</b>` : ''}`
       + `${ch.doc ? ' · ' + esc(ch.doc) : ''}</span>`;
     g.appendChild(head);
@@ -118,7 +126,7 @@ export function renderVars(el, store, rt) {
   if (ents.length) {
     html += '</div><div class="vars-grid">';
     for (const e of ents.slice(0, 24)) {
-      html += `<div class="var-card"><div class="k">${esc(e.name)}${e.isClone ? t(' · 克隆体') : ''}</div>` +
+      html += `<div class="var-card"><div class="k">${esc(e.name)}${e.isClone && !e.isPrototypeInstance ? t(' · 克隆体') : ''}</div>` +
         `<div class="v">x ${Math.round(e.x)} y ${Math.round(e.y)}<br>vx ${Math.round(e.vx || 0)} vy ${Math.round(e.vy || 0)}</div></div>`;
     }
   }
@@ -142,7 +150,7 @@ export function renderPerf(el, store, rt) {
   const max = Math.max(1, ...stats.map((s) => s.ms));
   let html = '<div class="perf-grid">';
   html += t('<div class="perf-row"><b>帧号</b><span>{_1}</span><span>运行 {_2}s · delta {_3}ms</span></div>', { _1: rt.frame, _2: rt.time.toFixed(1), _3: (rt.delta * 1000).toFixed(1) });
-  html += t('<div class="perf-row"><b>克隆体</b><span>{_1}</span><span>粒子 {_2}</span></div>', { _1: rt.state.clones.filter((n) => rt.state.entities[n]).length, _2: rt.state.particles.length });
+  html += t('<div class="perf-row"><b>克隆体</b><span>{_1}</span><span>粒子 {_2}</span></div>', { _1: rt.cloneCount(), _2: rt.state.particles.length });
   html += t('<div class="perf-row"><b>活跃脚本线程</b><span>{_1}</span><span></span></div>', { _1: Object.keys(rt._subscriptions || {}).length });
   for (const s of stats) {
     const w = Math.max(1, Math.round((s.ms / max) * 100));
@@ -170,43 +178,168 @@ export function renderConsole(el, rt) {
 export function renderHierarchy(el, store, rt, onSelect) {
   el.innerHTML = '';
   const sel = store.selectedEntityId;
-  const groups = [
-    { title: t('舞台'), items: (store.project.entities || []).filter((e) => e.kind === 'stage') },
-    { title: t('实体'), items: (store.project.entities || []).filter((e) => e.kind === 'sprite' && !e.parent) }
-  ];
-  for (const g of groups) {
-    if (!g.items.length) continue;
-    const t = document.createElement('div');
-    t.className = 'palette-sec';
-    t.textContent = g.title;
-    el.appendChild(t);
-    for (const e of g.items) {
-      const row = document.createElement('div');
-      row.className = 'hier-row' + (e.id === sel ? ' active' : '');
-      const sw = document.createElement('span');
-      sw.className = 'swatch';
-      sw.style.background = (e.render && e.render.color) || '#888';
-      const nm = document.createElement('span');
-      nm.className = 'n';
-      nm.textContent = `${e.kind === 'stage' ? '🎬 ' : (e.solid ? '🧱 ' : '◆ ')}${e.name}`;
-      const sc = document.createElement('span');
-      sc.className = 'sc';
-      sc.textContent = `${(e.scripts || []).length}`;
-      row.append(sw, nm, sc);
-      row.addEventListener('click', () => onSelect(e.id));
-      el.appendChild(row);
+  const sprites = (store.project.entities || []).filter((e) => e.kind === 'sprite');
+  const childrenOf = (name) => sprites.filter((e) => e.parent === name);
+  const tops = sprites.filter((e) => !e.parent);
+
+  // 拖拽中的源实体 id（HTML5 DnD 在 Electron 里 dataTransfer 偶尔取不到，用模块变量兜底）
+  let dragEntId = null;
+  const clearDropMarks = () => {
+    document.querySelectorAll('.drop-target,.drop-invalid,.dragging')
+      .forEach((n) => n.classList.remove('drop-target', 'drop-invalid', 'dragging'));
+  };
+
+  // 拖拽合法性：target 必须是 sprite、不是自己、也不是 src 的后代（防环）
+  const canParent = (srcId, targetId) => {
+    if (!srcId || srcId === targetId) return false;
+    const src = store.entityById(srcId), tgt = store.entityById(targetId);
+    if (!src || !tgt || tgt.kind !== 'sprite') return false;
+    const seen = new Set([src.name]);
+    const stack = [src.name];
+    while (stack.length) {
+      const cur = stack.pop();
+      for (const e of sprites) if (e.parent === cur && !seen.has(e.name)) { seen.add(e.name); stack.push(e.name); }
     }
+    return !seen.has(tgt.name);
+  };
+
+  // 一行实体；递归渲染它的子级（parent 层级在编辑器里看得见、运行时也认）
+  const makeRow = (e, depth) => {
+    const row = document.createElement('div');
+    row.className = 'hier-row' + (e.id === sel ? ' active' : '');
+    row.style.paddingLeft = (8 + depth * 16) + 'px';
+    const sw = document.createElement('span');
+    sw.className = 'swatch';
+    sw.style.background = (e.render && e.render.color) || '#888';
+    const nm = document.createElement('span');
+    nm.className = 'n';
+    nm.textContent = `${e.kind === 'stage' ? '🎬 ' : (e.solid ? '🧱 ' : '◆ ')}${e.name}`;
+    const sc = document.createElement('span');
+    sc.className = 'sc';
+    sc.textContent = `${(e.scripts || []).length}`;
+    row.append(sw, nm, sc);
+    // 删除入口：悬停才露出 ✕（舞台不给删，和属性检查器保持一致）
+    if (e.kind !== 'stage') {
+      const del = document.createElement('button');
+      del.className = 'hier-del';
+      del.textContent = '✕';
+      del.title = t('删除实体');
+      del.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        confirmRemoveEntity(store, rt, e.id);
+      });
+      row.appendChild(del);
+
+      // —— 拖拽设父级 ——
+      row.draggable = true;
+      row.addEventListener('dragstart', (ev) => {
+        dragEntId = e.id;
+        row.classList.add('dragging');
+        ev.dataTransfer.effectAllowed = 'move';
+        try { ev.dataTransfer.setData('text/plain', e.id); } catch { /* Electron 下偶尔抛，靠 dragEntId 兜底 */ }
+      });
+      row.addEventListener('dragend', () => { dragEntId = null; clearDropMarks(); });
+      row.addEventListener('dragover', (ev) => {
+        const ok = canParent(dragEntId, e.id);
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = ok ? 'move' : 'none';
+        row.classList.toggle('drop-target', ok);
+        row.classList.toggle('drop-invalid', !ok);
+      });
+      row.addEventListener('dragleave', () => row.classList.remove('drop-target', 'drop-invalid'));
+      row.addEventListener('drop', (ev) => {
+        ev.preventDefault();
+        row.classList.remove('drop-target', 'drop-invalid');
+        if (canParent(dragEntId, e.id)) store.setEntityParent(dragEntId, e.name);
+      });
+    }
+    row.addEventListener('click', () => onSelect(e.id));
+    el.appendChild(row);
+    for (const c of childrenOf(e.name)) makeRow(c, depth + 1);
+  };
+
+  for (const g of [
+    { title: t('舞台'), items: (store.project.entities || []).filter((e) => e.kind === 'stage'), detach: false },
+    { title: t('实体'), items: tops, detach: true },
+  ]) {
+    // 「实体」分组始终渲染（只要有 sprite），这样即使所有实体都挂了父级，
+    // 也能把某个拖回这个标题上「取消父子关系」
+    const render = g.detach ? (sprites.length > 0) : (g.items.length > 0);
+    if (!render) continue;
+    const sec = document.createElement('div');
+    sec.className = 'palette-sec';
+    sec.textContent = g.title;
+    if (g.detach) {
+      sec.title = t('把实体拖到这里可取消父子关系');
+      sec.addEventListener('dragover', (ev) => {
+        const ent = store.entityById(dragEntId);
+        if (ent) { ev.preventDefault(); sec.classList.add('drop-target'); }
+      });
+      sec.addEventListener('dragleave', () => sec.classList.remove('drop-target'));
+      sec.addEventListener('drop', (ev) => {
+        ev.preventDefault();
+        sec.classList.remove('drop-target');
+        const ent = store.entityById(dragEntId);
+        if (ent && ent.parent) store.setEntityParent(dragEntId, null);
+      });
+    }
+    el.appendChild(sec);
+    for (const e of g.items) makeRow(e, 0);
   }
+
   // 克隆体
   if (rt.isRunning()) {
-    const clones = rt.state.order.map((n) => rt.state.entities[n]).filter((e) => e && e.isClone);
+    const clones = rt.state.order.map((n) => rt.state.entities[n]).filter((e) => e && e.isClone && !e.isPrototypeInstance);
     if (clones.length) {
-      const t = document.createElement('div');
-      t.className = 'palette-sec';
-      t.textContent = t('克隆体（{_1}）', { _1: clones.length });
-      el.appendChild(t);
+      const sec = document.createElement('div');
+      sec.className = 'palette-sec';
+      sec.textContent = t('克隆体（{_1}）', { _1: clones.length });
+      el.appendChild(sec);
     }
   }
+}
+
+/* ================================================================== */
+/* 删除实体：确认框（层级面板的 ✕ 走这里）                              */
+/* ================================================================== */
+/** 运行时还活着的话，数一数「属于这个实体」的订阅有几条 */
+function countEntitySubs(rt, name) {
+  let n = 0;
+  try {
+    const rtObj = rt;
+    if (!rtObj || !rtObj.subscribersOf) return 0;
+    for (const ch of Object.keys(rtObj._subByChannel || {})) {
+      for (const s of rtObj.subscribersOf(ch) || []) if (s.entityName === name) n++;
+    }
+  } catch { /* 运行时没起来，订阅当然是 0 */ }
+  return n;
+}
+
+/**
+ * 删实体不是一拍脑袋的事：它自己有几段脚本、别处引用了它几次、运行时有几条订阅，
+ * 都要摆出来让人看清楚再删。
+ */
+function confirmRemoveEntity(store, rt, id) {
+  const ent = store.entityById(id);
+  if (!ent || ent.kind === 'stage') return;
+  const info = store.entityRefInfo(id);
+  const subs = countEntitySubs(rt, ent.name);
+
+  const body = document.createElement('div');
+  body.className = 'confirm-body';
+  body.appendChild(hint(t('删除「{_1}」？', { _1: ent.name })));
+  body.appendChild(hint(t('它有 {_1} 段脚本、被别处引用 {_2} 次、运行时有 {_3} 条订阅。删除后，这些脚本和订阅会一起消失。', { _1: info.scripts, _2: info.refs, _3: subs })));
+  if (info.refs > 0) body.appendChild(hint(t('别处对它的引用会留在原地（改成谁都不合适）；删错了可以 Ctrl+Z 撤销。')));
+
+  showModal({
+    title: t('删除实体'),
+    body,
+    okText: t('删除'),
+    onOk: () => {
+      store.removeEntity(id);
+      return true;
+    },
+  });
 }
 
 /* ================================================================== */

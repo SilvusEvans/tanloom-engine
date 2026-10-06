@@ -1,0 +1,242 @@
+/**
+ * Tanloom Engine — Material You 动效层
+ * ================================================================
+ * 只加过渡与动画，**不改任何布局结构和业务逻辑**：文件里没有一处
+ * display / position / width，也不触碰 color（颜色一律读现有变量）。
+ * 它排在几个样式表之后引入，所以同名规则由它胜出（纯动效参数）。
+ *
+ * M3 的三类动效：
+ *   容器变换 container transform  —— 对话框从触发它的那块「变」出来
+ *   共享轴   shared axis          —— 视图 / 面板沿着一个轴推进
+ *   淡出淡入 fade through         —— 内容一起淡掉再一起淡回来
+ *
+ * 两个约定：
+ *   1. 时长一律 calc(基准 * var(--motion)) —— --motion 是全局开关倍数，
+ *      prefers-reduced-motion 下置 0，所有动效一次关干净。
+ *   2. 位移幅度也是变量（--slide-x / --slide-y / --zoom-from / --press-scale），
+ *      想调手感只改 :root，不用翻到具体规则里。
+ */
+
+:root {
+  /* ---- 缓动：M3 的六条标准曲线 ---- */
+  --ease-standard: cubic-bezier(.2, 0, 0, 1);
+  --ease-standard-accelerate: cubic-bezier(.3, 0, 1, 1);      /* 离开屏幕：先慢后快 */
+  --ease-standard-decelerate: cubic-bezier(0, 0, 0, 1);       /* 进入屏幕：先快后慢 */
+  --ease-emphasized: cubic-bezier(.2, 0, 0, 1);
+  --ease-emphasized-accelerate: cubic-bezier(.3, 0, .8, .15);
+  --ease-emphasized-decelerate: cubic-bezier(.05, .7, .1, 1); /* 最常用：到位感最强 */
+
+  /* ---- 时长：M3 的短/中/长三档（本次全部落在 200–500ms 区间） ---- */
+  --dur-short: 200ms;   /* 小部件的进出、状态切换 */
+  --dur-medium: 300ms;  /* 容器变换、共享轴 */
+  --dur-long: 400ms;    /* 大范围布局变化（折叠） */
+  --dur-extra: 500ms;   /* 预留：整页切换之类 */
+  --dur-press: 90ms;    /* 按压反馈：要快于 150ms 才有「贴手」的感觉 */
+
+  /* ---- 幅度 ---- */
+  --slide-x: 28px;      /* 共享轴 X（左右推进） */
+  --slide-y: 14px;      /* 共享轴 Y（上下推进） */
+  --zoom-from: .92;     /* 容器变换起始缩放 */
+  --press-scale: .96;   /* 按钮按下去缩到多大 */
+  --lift: 2px;          /* 卡片悬停抬升多少 */
+  --stagger: 16ms;      /* 列表逐项延迟步长 */
+
+  /* 全局运动倍数：reduced-motion 时置 0，所有 duration/delay 一起归零 */
+  --motion: 1;
+}
+
+/* ================================================================== */
+/* 降级：prefers-reduced-motion                                        */
+/* ================================================================== */
+/* 归零而不是「把规则注释掉」—— 好处是降级路径和正常路径共用同一份
+   keyframes，不会出现「关了动效就忘了维护另一套」的情况。 */
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion: 0; --slide-x: 0px; --slide-y: 0px; --lift: 0px; --press-scale: 1; --zoom-from: 1; }
+}
+
+/* ================================================================== */
+/* 1. 容器变换：对话框                                                  */
+/* ================================================================== */
+/* 触发时机：任何 showModal()（新建实体 / 设置 / 宏 / 各处的增删改）
+   实现位置：dialogs.js 里建出来的 .modal-back 与 .modal
+   可调参数：--zoom-from（起始缩放）、--dur-medium、--ease-emphasized-decelerate */
+@keyframes m3-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes m3-container-in {
+  from { opacity: 0; transform: scale(var(--zoom-from)) translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.modal-back { animation: m3-backdrop-in calc(var(--dur-short) * var(--motion)) var(--ease-standard) both; }
+.modal { animation: m3-container-in calc(var(--dur-medium) * var(--motion)) var(--ease-emphasized-decelerate) both; }
+
+/* ================================================================== */
+/* 2. 共享轴 Z（缩放淡入）：四大视图切换                                */
+/* ================================================================== */
+/* 触发时机：点「积木 / 代码 / 场景 / 资源」任一页签（switchView）
+   实现位置：#view-blocks / #view-code / #view-scene / #view-assets
+   说明：   M3 的 fade through 原本是「旧的先淡出，新的再淡进」两段；
+            这里旧视图是 display:none 掉的，没法陪着淡出，所以只播后半段
+            —— 新视图从 opacity 0 + 略小的 scale 进来，视觉上仍是 fade through。
+   可调参数：--dur-medium、--ease-emphasized-decelerate、0.985 那个起始缩放 */
+@keyframes m3-fade-through {
+  from { opacity: 0; transform: scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+.view:not(.hidden) {
+  animation: m3-fade-through calc(var(--dur-medium) * var(--motion)) var(--ease-emphasized-decelerate) both;
+}
+
+/* ================================================================== */
+/* 3. 共享轴 Y：停靠面板 / 代码提示条 / 全屏层                          */
+/* ================================================================== */
+/* 触发时机：
+     #dock-body —— 点「广播时间轴 / 订阅列表 / 变量监视 / 性能 / 控制台」
+                   页签时，由 motion.js 挂 .mo-axis-y 触发（面板内容每 160ms
+                   就会重建一次，所以**不能**
+                   挂在「子节点插入」上，必须是页签点这一次动作）
+     .code-banner —— 代码区有未保存改动 / 解析报错时冒出来那条
+     .fullscreen-layer —— 全屏游玩层张开
+   可调参数：--slide-y、--dur-medium、--ease-emphasized-decelerate */
+@keyframes m3-axis-y {
+  from { opacity: 0; transform: translateY(calc(-1 * var(--slide-y))); }
+  to { opacity: 1; transform: none; }
+}
+#dock-body.mo-axis-y,
+.code-banner:not(.hidden),
+.fullscreen-layer:not(.hidden) {
+  animation: m3-axis-y calc(var(--dur-medium) * var(--motion)) var(--ease-emphasized-decelerate) both;
+}
+
+/* ================================================================== */
+/* 4. 淡出淡入 + 逐项延迟：列表项                                       */
+/* ================================================================== */
+/* 触发时机：层级树 / 文件列表 / 资源面板里的条目被重建时
+            （切实体、增删改变量与频道、切到对应视图）
+   实现位置：.hierarchy / .file-list / 资源面板 .list-body 的直接子元素
+   说明：   默认 --item-slide 为 0px，只淡不滑 —— 这些列表也参与点击命中，
+            动画期间位移会让坐标漂一格；想更有层次就把 --item-slide 调成 6px。
+   可调参数：--item-slide、--stagger、--dur-medium */
+:root { --item-slide: 0px; }
+
+@keyframes m3-item-in {
+  from { opacity: 0; transform: translateY(var(--item-slide)); }
+  to { opacity: 1; transform: none; }
+}
+:is(.hierarchy, .file-list, .assets-grid .list-body, .menu) > * {
+  animation: m3-item-in calc(var(--dur-medium) * var(--motion)) var(--ease-emphasized-decelerate) both;
+}
+/* 前 8 项错开出场，第 9 项起统一收在高位（不然长列表最后几项要等很久） */
+:is(.hierarchy, .file-list, .assets-grid .list-body, .menu) > :nth-child(1) { animation-delay: calc(0ms * var(--motion)); }
+:is(.hierarchy, .file-list, .assets-grid .list-body, .menu) > :nth-child(2) { animation-delay: calc(var(--stagger) * var(--motion)); }
+:is(.hierarchy, .file-list, .assets-grid .list-body, .menu) > :nth-child(3) { animation-delay: calc(var(--stagger) * 2 * var(--motion)); }
+:is(.hierarchy, .file-list, .assets-grid .list-body, .menu) > :nth-child(4) { animation-delay: calc(var(--stagger) * 3 * var(--motion)); }
+:is(.hierarchy, .file-list, .assets-grid .list-body, .menu) > :nth-child(5) { animation-delay: calc(var(--stagger) * 4 * var(--motion)); }
+:is(.hierarchy, .file-list, .assets-grid .list-body, .menu) > :nth-child(6) { animation-delay: calc(var(--stagger) * 5 * var(--motion)); }
+:is(.hierarchy, .file-list, .assets-grid .list-body, .menu) > :nth-child(7) { animation-delay: calc(var(--stagger) * 6 * var(--motion)); }
+:is(.hierarchy, .file-list, .assets-grid .list-body, .menu) > :nth-child(n + 8) { animation-delay: calc(var(--stagger) * 7 * var(--motion)); }
+
+/* ================================================================== */
+/* 5. 按压反馈：所有按钮                                                */
+/* ================================================================== */
+/* 触发时机：任意按钮按下 / 松开（含顶栏运行区、页签、停靠页签、对话框按钮）
+   实现位置：全局 button —— 各组件里写过的 transition 由本条统一收编，
+            没必要每个按钮各自写一遍曲线
+   说明：按下走 accelerate（短、快），松开回位走 emphasized-decelerate（长、稳），
+        这是 M3 里「先响应、再优雅地回」的手感来源。
+   可调参数：--press-scale、--dur-press、--dur-short */
+button {
+  transition:
+    background-color calc(var(--dur-short) * var(--motion)) var(--ease-standard),
+    background-image calc(var(--dur-short) * var(--motion)) var(--ease-standard),
+    border-color calc(var(--dur-short) * var(--motion)) var(--ease-standard),
+    color calc(var(--dur-short) * var(--motion)) var(--ease-standard),
+    box-shadow calc(var(--dur-short) * var(--motion)) var(--ease-standard),
+    transform calc(var(--dur-short) * var(--motion)) var(--ease-emphasized-decelerate);
+}
+button:active:not(:disabled) {
+  transform: scale(var(--press-scale));
+  transition-duration: calc(var(--dur-press) * var(--motion));
+  transition-timing-function: var(--ease-standard-accelerate);
+}
+/* 主按钮（▶ 运行 / 保存到积木 / 对话框确认）按下时轻轻沉下去 —— M3 的 elevation 反馈 */
+button.run:active:not(:disabled),
+button.primary:active:not(:disabled) {
+  transform: scale(calc(var(--press-scale) - .02));
+}
+
+/* ================================================================== */
+/* 6. 状态变化：页签二级指示器                                          */
+/* ================================================================== */
+/* 触发时机：模式页签 / 停靠页签的选中项变化（active class 切换）
+   实现位置：用 ::after 伪元素做指示器（没有动过 HTML 结构）
+   可调参数：--dur-short、--ease-emphasized-decelerate、高度 2px */
+.mode-tabs button,
+.dock-tabs button[data-panel] { position: relative; }
+.mode-tabs button::after,
+.dock-tabs button[data-panel]::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 2px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--md-primary, var(--accent));
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform calc(var(--dur-short) * var(--motion)) var(--ease-emphasized-decelerate);
+  pointer-events: none;
+}
+.mode-tabs button.active::after,
+.dock-tabs button[data-panel].active::after { transform: scaleX(1); }
+
+/* ================================================================== */
+/* 7. 卡片：悬停抬升（elevation）与折叠                                 */
+/* ================================================================== */
+/* 触发时机：鼠标掠过资源面板的卡片 / 变量监视卡
+   可调参数：--lift、--dur-short */
+.assets-grid .panel,
+.var-card {
+  transition:
+    background-color calc(var(--dur-short) * var(--motion)) var(--ease-standard),
+    border-color calc(var(--dur-short) * var(--motion)) var(--ease-standard),
+    box-shadow calc(var(--dur-short) * var(--motion)) var(--ease-standard),
+    transform calc(var(--dur-short) * var(--motion)) var(--ease-emphasized-decelerate);
+}
+.assets-grid .panel:hover,
+.var-card:hover { transform: translateY(calc(-1 * var(--lift))); }
+
+/* 停靠坞折叠：原来的 .16s 换成 M3 的递减曲线（同一个过渡，只是参数换了） */
+.dock { transition: height calc(var(--dur-long) * var(--motion)) var(--ease-emphasized-decelerate); }
+
+/* ================================================================== */
+/* 8. 轻提示：M3 snackbar                                               */
+/* ================================================================== */
+/* 触发时机：toast() 被调用（保存成功、导出完成、生成分享码…）
+   实现位置：dialogs.js 建的 .toast；退场那一段是它自己加的行内 opacity，
+            这里把 transform 一起带上，退场就是「滑下去 + 淡掉」。
+   可调参数：--dur-medium、--slide-y */
+@keyframes m3-toast-in {
+  from { opacity: 0; transform: translateY(var(--slide-y)) scale(.96); }
+  to { opacity: 1; transform: none; }
+}
+.toast {
+  animation: m3-toast-in calc(var(--dur-medium) * var(--motion)) var(--ease-emphasized-decelerate) both;
+  transition:
+    opacity calc(var(--dur-short) * var(--motion)) var(--ease-standard-accelerate),
+    transform calc(var(--dur-short) * var(--motion)) var(--ease-standard-accelerate);
+}
+
+/* ================================================================== */
+/* 9. 弹层菜单                                                          */
+/* ================================================================== */
+/* 触发时机：右键菜单、下拉菜单出现（popup-layer / ctx-layer 里的 .menu）
+   可调参数：--zoom-from、--dur-short */
+@keyframes m3-menu-in {
+  from { opacity: 0; transform: scale(calc(var(--zoom-from) + .04)); }
+  to { opacity: 1; transform: none; }
+}
+#popup-layer > .menu,
+#ctx-layer > .menu {
+  animation: m3-menu-in calc(var(--dur-short) * var(--motion)) var(--ease-emphasized-decelerate) both;
+  transform-origin: top left;
+}

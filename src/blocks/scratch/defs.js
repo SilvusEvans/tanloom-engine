@@ -279,6 +279,22 @@ def({
   make: () => ({ type: 'OnClone' }),
 });
 
+def({
+  block: 'control_when_destroyed', cat: 'control', shape: 'hat',
+  message: t('当作为克隆体被删除时'),
+  args: [],
+  match: (n) => n.type === 'OnDestroyed',
+  make: () => ({ type: 'OnDestroyed' }),
+});
+
+def({
+  block: 'df_whenscene', cat: 'event', shape: 'hat',
+  message: t('当场景切换时'),
+  args: [],
+  match: (n) => n.type === 'OnScene',
+  make: () => ({ type: 'OnScene' }),
+});
+
 /* ---------------- 控制 ---------------- */
 def({
   block: 'control_wait', cat: 'control', shape: 'statement', message: null,
@@ -919,22 +935,6 @@ gameDef({
   block: 'df_clone_count', shape: 'reporter', message: t('克隆体数量'), args: [],
   match: (n) => n.type === 'CloneCount',
   make: () => ({ type: 'CloneCount' }),
-});
-
-/* ---------------- 代码积木 ---------------- */
-def({
-  block: 'df_code_stmt', cat: 'myblocks', shape: 'statement',
-  message: t('⚙ 执行代码 %1'),
-  args: [['CODE', 'field', 'code', { text: true, multiline: true }]],
-  match: (n) => n.type === 'CodeBlockStatement',
-  make: (f) => ({ type: 'CodeBlockStatement', code: f.CODE }),
-});
-def({
-  block: 'df_code_expr', cat: 'myblocks', shape: 'reporter',
-  message: t('⚙ 代码 %1'),
-  args: [['CODE', 'field', 'code', { text: true, multiline: true }]],
-  match: (n) => n.type === 'CodeBlock',
-  make: (f) => ({ type: 'CodeBlock', code: f.CODE }),
 });
 
 /* ------------------------------------------------------------------ */

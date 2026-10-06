@@ -70,8 +70,7 @@ export const E = {
   mouseX: () => ({ type: 'MouseX' }),
   mouseY: () => ({ type: 'MouseY' }),
   timer: () => ({ type: 'Timer' }),
-  macro: (macroId, args = []) => ({ type: 'MacroCall', macroId, args }),
-  code: (code, returns = true) => ({ type: 'CodeBlock', code, returns })
+  macro: (macroId, args = []) => ({ type: 'MacroCall', macroId, args })
 };
 
 /* ------------------------------------------------------------------ */
@@ -105,8 +104,7 @@ export const S = {
   changeVar: (name, delta) => ({ type: 'ChangeVar', name, delta: delta || E.num(1) }),
   listAdd: (list, value) => ({ type: 'ListAdd', list, value }),
   clone: (entity) => ({ type: 'Clone', entity }),
-  macroCall: (macroId, args = []) => ({ type: 'MacroCallStatement', macroId, args }),
-  code: (code) => ({ type: 'CodeBlockStatement', code })
+  macroCall: (macroId, args = []) => ({ type: 'MacroCallStatement', macroId, args })
 };
 
 export function isStatement(n) {
@@ -180,7 +178,7 @@ const EXPR_TYPES = new Set([
   'Number', 'String', 'Bool', 'VarRef', 'ListRef', 'ParamRef', 'BinaryOp', 'Compare',
   'Logic', 'Not', 'Neg', 'Random', 'MathOp', 'Join', 'LetterOf', 'LengthOf', 'Contains',
   'ListItem', 'ListLength', 'ListIndex', 'ListContains', 'Touching', 'DistanceTo',
-  'KeyDown', 'MouseDown', 'MouseX', 'MouseY', 'Timer', 'GetProp', 'MacroCall', 'CodeBlock'
+  'KeyDown', 'MouseDown', 'MouseX', 'MouseY', 'Timer', 'GetProp', 'MacroCall'
 ]);
 
 export function validateProject(project, knownStatements = null) {

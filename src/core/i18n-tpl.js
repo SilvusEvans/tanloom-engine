@@ -81,7 +81,6 @@ export const TPL = {
   '📣 {_1} {_2}「{_3}」（{_4} 条脚本）':
     { en: '📣 {_1} {_2} "{_3}" ({_4} scripts)', 'zh-Hant': '📣 {_1} {_2}「{_3}」（{_4} 條指令）' },
   '✖ 克隆体 / {_1}: {_2}': { en: '✖ Clone / {_1}: {_2}', 'zh-Hant': '✖ 分身 / {_1}: {_2}' },
-  '代码积木错误：{_1}': { en: 'Code block error: {_1}', 'zh-Hant': '程式積木錯誤：{_1}' },
   '缺失的积木宏：{_1}': { en: 'Missing block macro: {_1}', 'zh-Hant': '缺少積木巨集：{_1}' },
   '<span class="err">{_1} 条解析提示</span>':
     { en: '<span class="err">{_1} parse notes</span>', 'zh-Hant': '<span class="err">{_1} 則解析提示</span>' },

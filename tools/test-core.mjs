@@ -15,6 +15,7 @@ import { parseFile } from '../src/core/parser.js';
 import { ALL_DEFS, DEF_BY_OP, defForNode, shapeOf, instantiate } from '../src/core/blockdefs.js';
 import { seq } from '../src/core/ir.js';
 import { Runtime, attachDefs } from '../src/runtime/vm.js';
+import { Store } from '../src/core/store.js';
 import * as blockdefs from '../src/core/blockdefs.js';
 import { auditAll, auditTemplate } from './audit-correspondence.mjs';
 import { readFileSync } from 'node:fs';
@@ -127,7 +128,7 @@ const project = createTemplateProject();
 {
   const stmtTypes = new Set(
     ALL_DEFS.filter((d) => ['statement', 'cblock', 'cap'].includes(d.kind)).map((d) => d.op)
-      .concat(['MacroCallStatement', 'CodeBlockStatement'])
+      .concat(['MacroCallStatement'])
   );
   const res = validateProject(project, stmtTypes);
   ok(res.ok, '校验失败：' + res.errors.join(' | '));
@@ -159,7 +160,7 @@ section('4. 代码 → IR 反向解析（往返一致性）');
   const roundTrip = (text, label) => {
     const res = parseFile(text, { project });
     const codes = countCodeBlocks(res.scripts);
-    console.log(`  ${label}: 解析出 ${res.scripts.length} 段脚本，降级为代码积木的语句 ${codes} 处` +
+    console.log(`  ${label}: 解析出 ${res.scripts.length} 段脚本，代码积木 ${codes} 处` +
       (res.diagnostics.length ? `，诊断 ${res.diagnostics.length} 条` : ''));
     for (const d of res.diagnostics) console.log('    · ' + d.msg);
     return { res, codes };
@@ -288,7 +289,7 @@ export async function onRender(ctx: FrameCtx) {
 }
 
 /* ---------------------------------------------------------------- */
-section('8. 未知代码降级为代码积木（无损）');
+section('8. 未知代码严格化：记录诊断，不降级成代码积木');
 {
   const src = `// @on update
 export async function onUpdate(ctx: FrameCtx) {
@@ -301,10 +302,14 @@ export async function onUpdate(ctx: FrameCtx) {
   const res = parseFile(src, { project });
   const b = res.scripts[0].body.blocks;
   console.log('  语句：' + JSON.stringify(b.map((x) => x.type)));
-  const codeBlocks = b.filter((x) => x.type === 'CodeBlockStatement');
-  ok(codeBlocks.length >= 2, '未知语句应降级为代码积木，实际 ' + codeBlocks.length);
-  ok(codeBlocks.some((x) => String(x.code).includes('myCustomHelper')), '降级后应保留原始源码');
-  ok(!b.some((x) => x.type === 'SetVar' && x.value.type === 'CodeBlock' && !String(x.value.code)), 'SetVar 的值应保留代码积木');
+  console.log('  诊断：' + res.diagnostics.map((d) => d.msg).join(' | '));
+  // 旧行为：不认识的写法会降级成「代码积木」原样保留。现在改为严格化：
+  // 认不出就记录诊断并丢弃，绝不留下「执行代码」积木。
+  ok(res.diagnostics.length >= 2, '应记录至少 2 条诊断（for 循环 / 未知函数调用），实际 ' + res.diagnostics.length);
+  ok(!b.some((x) => x.type === 'CodeBlockStatement' || x.type === 'CodeBlock'), '不得降级成代码积木');
+  // 能映射的骨架仍保留：vars.分数 = ... 仍是 SetVar，只是未知表达式退化为常量
+  const sv = b.find((x) => x.type === 'SetVar' && x.name === '分数');
+  ok(sv && sv.value.type === 'BinaryOp', '可识别的赋值骨架保留，未知表达式退化为常量 0 + 1');
 }
 
 /* ---------------------------------------------------------------- */
@@ -347,11 +352,11 @@ section('9. 订阅开关积木：将 XX 广播订阅状态设为 订阅 / 取消
     ok(got2 && got2.type === 'SetSubscribed' && got2.state === 'subscribe' && got2.channel === 'update',
       'true 解析成「订阅」：' + JSON.stringify(got2));
 
-    // 参数不是 true/false 字面量 → 降级成代码积木，不丢信息
+    // 参数不是 true/false 字面量 → 映射不回来，严格化下直接丢弃并记诊断
     const back3 = parseFile('// @on start\nexport async function onStart(ctx: FrameCtx) {\n  tl.setSubscribed(动态频道, 开关);\n}\n', { project: merged });
     const got3 = back3.scripts[0] && back3.scripts[0].body.blocks[0];
-    ok(got3 && got3.type === 'CodeBlockStatement' && /setSubscribed/.test(got3.code),
-      '映射不回来时降级为代码积木（原样保留）：' + JSON.stringify(got3));
+    ok(!got3, '映射不回来的 setSubscribed 直接丢弃（不降级为代码积木）');
+    ok(back3.diagnostics.length >= 1, '并记录了诊断：' + back3.diagnostics.map((d) => d.msg).join(' | '));
   }
 
   /* ---- (c) 运行时语义：纯 Node 里步进就能验 ---- */
@@ -372,6 +377,10 @@ section('9. 订阅开关积木：将 XX 广播订阅状态设为 订阅 / 取消
               { type: 'ChangeVar', name: '计数', delta: { type: 'Number', value: 1 } },
               { type: 'Wait', sec: { type: 'Number', value: 0.02 } },
             ]) },
+          ]) },
+          // 再加一条 OnClone，用来验证「一切皆广播」后 _clone 也走 muted
+          { id: 's_c', hat: { type: 'OnClone' }, body: seq([
+            { type: 'ChangeVar', name: '计数', delta: { type: 'Number', value: 100 } },
           ]) },
         ],
       });
@@ -419,7 +428,130 @@ section('9. 订阅开关积木：将 XX 广播订阅状态设为 订阅 / 取消
     rt2.running = true;
     ok(rt2.isSubscribed('测试体', 'update') === true, '重新 load 之后订阅状态回到初始值');
     console.log(`  订阅中 30 帧 → 计数 ${a}；取消订阅再 40 帧 → ${b}（不涨）；重新订阅 30 帧 → ${c}`);
+
+    // 克隆体启动也必须走总线：给 _clone 打 muted 后，再克隆不应触发脚本。
+    // 这钉住「一切皆广播」一期要修的核心漏洞。
+    const p2 = createTemplateProject();
+    p2.variables['克隆计数'] = 0;
+    p2.entities.push({
+      id: 'ent_c', name: '克隆测试', kind: 'sprite', visible: true, x: 0, y: 0, dir: 90, size: 100,
+      opacity: 100, rotationStyle: 'all', render: { shape: 'box', color: '#ffffff', width: 10, height: 10 },
+      tags: [], solid: false, physics: { gravity: 0, vx: 0, vy: 0, bounce: 0, drag: 1, enabled: false },
+      scripts: [
+        { id: 's_c', hat: { type: 'OnClone' }, body: seq([
+          { type: 'ChangeVar', name: '克隆计数', delta: { type: 'Number', value: 100 } },
+        ]) },
+      ],
+    });
+    const rt3 = new Runtime(p2, {});
+    rt3.load(p2);
+    rt3.running = true;
+    rt3.setSubscribed('克隆测试', '_clone', false);
+    rt3.clone(rt3.state.entities['克隆测试']);
+    await step(rt3, 2);                       // 让 lifecycle 相位把 _clone 派发出去
+    ok(rt3.state.vars['克隆计数'] === 0, `取消 _clone 订阅后，克隆体启动不应跑脚本：${rt3.state.vars['克隆计数']}`);
+
+    // 三期：原型-克隆体一元化
+    const p3 = createTemplateProject();
+    const proto = p3.entities.find((e) => e.name === '玩家');
+    proto.scripts = [{ id: 's_oc', hat: { type: 'OnClone' }, body: seq([{ type: 'Nop' }]) }];
+    const rt4 = new Runtime(p3, {});
+    rt4.load(p3);
+    rt4.running = true;
+    const player = rt4.state.entities['玩家'];
+    ok(player.isClone === true && player.isPrototypeInstance === true, '原型实例也是克隆体（isPrototypeInstance 标记）');
+    ok(rt4.cloneCount() === 0, '初始时克隆体数量不含原型实例');
+    rt4.settings.cloneLimit = 2;
+    for (let i = 0; i < 5; i++) rt4.clone(player);
+    ok(rt4.cloneCount() === 2, `上限 2 时，克隆 5 次只保留 2 个：实际 ${rt4.cloneCount()}`);
   }
+}
+
+/* ---------------------------------------------------------------- */
+section('13. 运行时 parent 层级（跟随 + 子级自移动 + 多级嵌套 + 父级死亡解绑）');
+{
+  const mk = () => {
+    const p = createTemplateProject();
+    const sprite = (id, name, parent, x) => ({
+      id, name, kind: 'sprite', parent,
+      x, y: 0, dir: 90, size: 100, opacity: 100, rotationStyle: 'all',
+      render: { shape: 'box', color: '#ffffff', width: 10, height: 10 },
+      tags: [], solid: false, physics: { gravity: 0, vx: 0, vy: 0, bounce: 0, drag: 1, enabled: false },
+      scripts: [],
+    });
+    p.entities.push(sprite('ent_p', 'P', null, 100));
+    p.entities.push(sprite('ent_c', 'C', 'P', 130));   // 相对父级偏移 +30
+    p.entities.push(sprite('ent_d', 'D', 'C', 160));   // 相对 C 偏移 +30（多级嵌套）
+    const rt = new Runtime(p, {});
+    rt.load(p);
+    rt.running = true;
+    return rt;
+  };
+  const step = async (rt, n) => {
+    for (let i = 0; i < n; i++) { rt.step(1 / 60); await new Promise((r) => setTimeout(r, 0)); }
+  };
+
+  const rt = mk();
+  await step(rt, 3);
+  ok(rt.state.entities['C'].x === 130 && rt.state.entities['C'].y === 0,
+    `初始偏移跟随：C 应在 (130,0)，实际 (${rt.state.entities['C'].x},${rt.state.entities['C'].y})`);
+  ok(rt.state.entities['D'].x === 160, `多级嵌套初始跟随：D.x=160 实际 ${rt.state.entities['D'].x}`);
+
+  // 移动父级 +50 → 子级、孙级应跟随
+  rt.state.entities['P'].x += 50;
+  await step(rt, 1);
+  ok(rt.state.entities['C'].x === 180, `父级移动后子级跟随：C.x=180 实际 ${rt.state.entities['C'].x}`);
+  ok(rt.state.entities['D'].x === 210, `父级移动后孙级跟随：D.x=210 实际 ${rt.state.entities['D'].x}`);
+
+  // 子级自己再移动 +10（积木/代码写 self.x 同样生效）
+  rt.state.entities['C'].x += 10;
+  await step(rt, 1);
+  ok(rt.state.entities['C'].x === 190, `子级自移动 + 跟随叠加：C.x=190 实际 ${rt.state.entities['C'].x}`);
+  ok(rt.state.entities['D'].x === 220, `孙级跟随子级自移动：D.x=220 实际 ${rt.state.entities['D'].x}`);
+
+  // 父级再移动 +20 → C 到 210，D 到 240
+  rt.state.entities['P'].x += 20;
+  await step(rt, 1);
+  ok(rt.state.entities['C'].x === 210, `父级再次移动后子级跟随：C.x=210 实际 ${rt.state.entities['C'].x}`);
+  ok(rt.state.entities['D'].x === 240, `父级再次移动后孙级跟随：D.x=240 实际 ${rt.state.entities['D'].x}`);
+
+  // 父级死亡 → 子级解绑，停在当前位置
+  rt.state.entities['P'].alive = false;
+  await step(rt, 2);
+  const c = rt.state.entities['C'];
+  ok(c && c.parentRef === null, '父级死亡后子级解绑（parentRef 清空）');
+  ok(c.x === 210, `解绑后子级留在原地：C.x=210 实际 ${c && c.x}`);
+}
+
+/* ---------------------------------------------------------------- */
+section('14. 编辑器 setEntityParent（防环 / 非法父级 / 解绑）');
+{
+  const store = new Store(createTemplateProject());
+  const mk = (id, name, parent) => { store.project.entities.push({ id, name, kind: 'sprite', parent, x: 0, y: 0 }); };
+  mk('e_a', 'A', null);
+  mk('e_b', 'B', 'A');   // A → B（B 是 A 的子）
+  mk('e_c', 'C', 'B');   // B → C（C 是 B 的子，A 的孙）
+
+  // 正常挂接
+  ok(store.setEntityParent('e_a', 'C') === false, 'A 不能挂到自己的后代 C 上（防环）');
+  ok(store.setEntityParent('e_b', 'C') === false, 'B 不能挂到自己的后代 C 上');
+  ok(store.setEntityParent('e_a', 'A') === false, 'A 不能挂到自己身上');
+  ok(store.setEntityParent('e_c', '舞台') === false, '不能挂到舞台');
+  ok(store.setEntityParent('e_a', '不存在') === false, '不能挂到不存在的实体');
+  ok(store.setEntityParent('e_a', 'C') === false, '重复设置同一父级应返回 false（无变化）');
+
+  // 真正能改的：把 C 从 B 下移到 A 下
+  const before = store.project.entities.find((e) => e.id === 'e_c').parent;
+  ok(store.setEntityParent('e_c', 'A') === true, 'C 改挂到 A 下成功');
+  ok(store.project.entities.find((e) => e.id === 'e_c').parent === 'A', 'C.parent 已变为 A');
+
+  // 解绑：把 C 拖回顶层（parent = null）
+  ok(store.setEntityParent('e_c', null) === true, 'C 取消父级成功');
+  ok(store.project.entities.find((e) => e.id === 'e_c').parent === null, 'C.parent 已清空');
+
+  // 撤销能还原解绑
+  store.undo();
+  ok(store.project.entities.find((e) => e.id === 'e_c').parent === 'A', '撤销后 C 回到 A 下');
 }
 
 /* ---------------------------------------------------------------- */
@@ -474,29 +606,31 @@ section('11. 舞台点击：点角色能触发「当被点击」，判定框跟�
     return rt;
   };
   const V = (rt) => rt.state.vars['点击计数'];
+  // 点击现在统一入队，在下一帧 lifecycle 相位派发；断言前先 step 一帧。
+  const click = (rt, x, y) => { rt.clickAt(x, y); rt.step(1 / 60); };
 
   {
     const rt = build(100);
     ok(rt.subscribersOf('_click').length === 1, '「当被点击」应注册成 _click 订阅');
-    rt.clickAt(-200, 150);
+    click(rt, -200, 150);
     ok(V(rt) === 1, '点角色身上应触发「当被点击」，实际 ' + V(rt));
-    rt.clickAt(-200 + 15, 150);                 // 玩家 w=42 → 半边 21px
+    click(rt, -200 + 15, 150);                 // 玩家 w=42 → 半边 21px
     ok(V(rt) === 2, '点角色边上（15px，仍在框内）也应触发，实际 ' + V(rt));
-    rt.clickAt(-200, 150 + 18);                 // 玩家 h=46 → 半边 23px
+    click(rt, -200, 150 + 18);                 // 玩家 h=46 → 半边 23px
     ok(V(rt) === 3, '点角色上方 18px（仍在框内）也应触发，实际 ' + V(rt));
-    rt.clickAt(-200 + 40, 150);                 // 超出半边 21px
+    click(rt, -200 + 40, 150);                 // 超出半边 21px
     ok(V(rt) === 3, '点在角色外（右 40px）不该触发，实际 ' + V(rt));
-    rt.clickAt(240, 180);
+    click(rt, 240, 180);
     ok(V(rt) === 3, '点舞台空处不该触发，实际 ' + V(rt));
   }
 
   {
     // 判定框要跟着「大小」缩放 —— 绘制、编辑器拾取、物理、点击必须同一个框
     const big = build(200);
-    big.clickAt(-200 + 30, 150);                // 半边 21→42：这时点在框内
+    click(big, -200 + 30, 150);                // 半边 21→42：这时点在框内
     ok(V(big) === 1, '大小 200% 时，放大后的范围内应命中，实际 ' + V(big));
     const full = build(100);
-    full.clickAt(-200 + 30, 150);               // 原尺寸下 30 > 21：不该命中
+    click(full, -200 + 30, 150);               // 原尺寸下 30 > 21：不该命中
     ok(V(full) === 0, '原尺寸下同一个点不该命中（判定框没跟着大小走？）实际 ' + V(full));
   }
 
@@ -513,12 +647,85 @@ section('11. 舞台点击：点角色能触发「当被点击」，判定框跟�
     }];
     const rt = new Runtime(p, {});
     rt.load(p); rt.running = true;
-    rt.clickAt(-200, 150);                      // 这一点上金币压在玩家上面
+    click(rt, -200, 150);                      // 这一点上金币压在玩家上面
     ok(rt.state.vars['金币点'] === 1, '应命中金币（它在 z 序上面）');
     const other = p.entities.find((e) => e.name === '玩家');
     other.x = -200; other.y = 150;
-    rt.clickAt(-200, 150);
+    click(rt, -200, 150);
     ok(rt.state.vars['金币点'] === 2, '第二次仍然命中金币，不该穿到下面的玩家');
+  }
+}
+
+/* ---------------------------------------------------------------- */
+section('12. 删除实体 / 合成积木');
+{
+  const walk = (root, fn) => {
+    const go = (x) => {
+      if (!x || typeof x !== 'object') return;
+      if (Array.isArray(x)) { x.forEach(go); return; }
+      fn(x);
+      for (const v of Object.values(x)) { if (v && typeof v === 'object') go(v); }
+    };
+    go(root);
+  };
+
+  // A. 删表达式宏：调用点直接删除（不再降级成代码积木）
+  {
+    const store = new Store(createTemplateProject());
+    const res = store.removeMacro('macro_pow2');
+    ok(!store.project.macros.macro_pow2, '宏「平方」已从定义表移除');
+    ok(res.removed >= 2, `直接删除了至少 2 处调用点（玩家跳跃 + 立方宏体），实际 ${res.removed}`);
+
+    const player = store.project.entities.find((e) => e.name === '玩家');
+    let leftCall = false, codeTexts = [];
+    walk(player.scripts, (n) => {
+      if (n.type === 'MacroCall' && n.macroId === 'macro_pow2') leftCall = true;
+      if (n.type === 'CodeBlock') codeTexts.push(n.code);
+    });
+    ok(!leftCall, '残留的 MacroCall 已清空');
+    // 严格化：直接删除调用点，不再降级成「执行代码」积木
+    ok(codeTexts.length === 0, '调用点直接删除，没有降级成代码积木：' + JSON.stringify(codeTexts));
+
+    // 立方宏体内引用了平方，也一并删除（否则删了平方，立方成了悬空引用）
+    let cubeLeft = false;
+    walk(store.project.macros.macro_cube, (n) => {
+      if (n.type === 'MacroCall' && n.macroId === 'macro_pow2') cubeLeft = true;
+    });
+    ok(!cubeLeft, '宏与宏之间的调用也被删除（立方体内不再引用平方）');
+  }
+
+  // B. 删语句宏：调用点直接删除（不再降级成代码积木）
+  {
+    const store = new Store(createTemplateProject());
+    const res = store.removeMacro('macro_hurt');
+    ok(res.removed >= 1, `直接删除了语句型宏调用点（玩家受伤），实际 ${res.removed}`);
+    const player = store.project.entities.find((e) => e.name === '玩家');
+    let leftStmt = false, codeStmt = '';
+    walk(player.scripts, (n) => {
+      if (n.type === 'MacroCallStatement' && n.macroId === 'macro_hurt') leftStmt = true;
+      if (n.type === 'CodeBlockStatement') codeStmt = n.code;
+    });
+    ok(!leftStmt, '语句型宏调用已清空');
+    ok(codeStmt === '', `语句调用点直接删除（不再降级成代码积木）—— ${codeStmt}`);
+  }
+
+  // C. 实体引用统计 + 删除
+  {
+    const store = new Store(createTemplateProject());
+    const player = store.project.entities.find((e) => e.name === '玩家');
+    const coin = store.project.entities.find((e) => e.name === '金币');
+    ok(store.entityRefInfo(player.id).scripts >= 1, '玩家自己有脚本');
+    // 造一处跨实体引用：金币脚本里读「玩家的 x 坐标」
+    store.commit('测试引用', (p) => {
+      const c = p.entities.find((e) => e.name === '金币');
+      c.scripts.push({ id: 's_ref', hat: { type: 'OnStart' }, body: seq([{ type: 'GetProp', entity: '玩家', prop: 'x' }]) });
+    });
+    const info = store.entityRefInfo(player.id);
+    ok(info.refs >= 1, `别处引用玩家至少 1 处（实际 ${info.refs}）`);
+
+    store.removeEntity(player.id);
+    ok(!store.entityById(player.id), '实体已移除');
+    ok(store.selectedEntityId !== player.id, '选中的若是被删实体，已切到别的实体');
   }
 }
 

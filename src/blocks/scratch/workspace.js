@@ -39,9 +39,11 @@ export class ScratchWorkspace {
   /**
    * @param {HTMLElement} host    放 Blockly 的容器
    * @param {Store} store
-   * @param {object} opts  { onChange(), rt, onAutoRun() }
+   * @param {object} opts  { onChange(), rt, onAutoRun(), area() }
    *        rt        —— 运行时（点击积木要真的执行它）
    *        onAutoRun —— 没在运行时，点积木要先按一次「运行」，由应用层负责
+   *        area      —— 取当前编辑区表面色的函数（见 applyEditTheme）。
+   *                     不给就是 Scratch 原生浅色；给了，积木画布就和代码区同源。
    */
   constructor(host, store, opts = {}) {
     this.host = host;
@@ -52,6 +54,7 @@ export class ScratchWorkspace {
     this.currentEntityId = null;
     this.states = new Map();
     this.pending = false;
+    this.area = null;      // 当前生效的编辑区表面色（applyEditTheme 写入）
 
     Blockly.ScratchMsgs.setLocale(scratchLocale());
     defineBlocks();
@@ -61,16 +64,18 @@ export class ScratchWorkspace {
       Object.values(store.project.macros || {}).map((m) => [m.id, macroSignature(m)]),
     );
     this._syncContext();
+    if (typeof opts.area === 'function') this.area = opts.area();
     this.ws = Blockly.inject(host, {
       toolbox: buildToolboxJson(store.project),
-      theme: buildTheme(store.project),
+      theme: buildTheme(store.project, this.area),
       scratchTheme: Blockly.ScratchBlocksTheme.CLASSIC,
       media: MEDIA_URL,
       pathToMedia: MEDIA_URL,
       zoom: { controls: true, wheel: true, startScale: 0.78, maxScale: 2.2, minScale: 0.3, scaleSpeed: 1.15 },
       trashcan: true,
       sounds: false,
-      grid: { spacing: 24, length: 1, colour: '#d8dbe3', snap: false },
+      // 网格是主体 Luna 之外唯一自带的深色/浅色线索 —— 深色画布上用深格点
+      grid: { spacing: 24, length: 1, colour: (this.area && this.area.grid) || '#d8dbe3', snap: false },
     });
 
     this.ws.addChangeListener((e) => this._onChange(e));
@@ -97,6 +102,29 @@ export class ScratchWorkspace {
       getSounds: () => SOUNDS,
       getAnimations: () => [],
     });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 编辑区主题：积木画布与代码区共用一套，这里负责跟上                */
+  /* ---------------------------------------------------------------- */
+  _buildTheme() { return buildTheme(this.store.project, this.area); }
+
+  /**
+   * 编辑区主题变了就把 Blockly 的主题整个换掉（会重绘所有积木，所以要幂等）。
+   * @param {?object} area  appearance.editTheme.ws；null 表示回落到 Scratch 原生浅色
+   */
+  applyEditTheme(area = null) {
+    const sig = area ? JSON.stringify(area) : '';
+    if (sig === this._areaSig) return false;
+    this._areaSig = sig;
+    this.area = area;
+    // 主体的 setTheme 不重画网格实例 —— 它的色值是 inject 时读走的，得单独推一次
+    try {
+      if (this.ws.options && this.ws.options.grid && area) this.ws.options.grid.colour = area.grid;
+      if (this.ws.grid_ && typeof this.ws.grid_.update === 'function') this.ws.grid_.update(this.ws);
+    } catch { /* 网格不影响视觉正确性，拿不到就算了 */ }
+    try { this.ws.setTheme(this._buildTheme()); } catch { /* ignore */ }
+    return true;
   }
 
   /* ---------------------------------------------------------------- */
@@ -606,7 +634,8 @@ export class ScratchWorkspace {
     this._lastToolboxXml = xml;
     // 新建的分类要能取到颜色：主题得跟着项目的分类一起重建，
     // 否则自建分类的积木 setStyle 会拿不到 style 而抛 Invalid colour。
-    try { this.ws.setTheme(buildTheme(this.store.project)); } catch { /* ignore */ }
+    //   就算是重刷选择区，主题也要带上当前编辑区表面色，否则会退回 Scratch 原生浅色
+    try { this.ws.setTheme(this._buildTheme()); } catch { /* ignore */ }
     this._wireToolboxButtons();
     try {
       this.ws.updateToolbox(buildToolboxJson(this.store.project));

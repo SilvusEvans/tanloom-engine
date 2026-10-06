@@ -64,14 +64,14 @@ export const MSG = {
     'zh-Hant': '存檔「{slot}」不存在',
   },
   '📂 读取存档「{slot}」': { en: '📂 Loaded save "{slot}"', 'zh-Hant': '📂 讀取存檔「{slot}」' },
-  '代码积木错误：{err.message}': {
-    en: 'Code block error: {err.message}',
-    'zh-Hant': '程式積木錯誤：{err.message}',
-  },
   '缺失的积木宏：{node.macroId}': {
     en: 'Missing block macro: {node.macroId}',
     'zh-Hant': '缺少的積木巨集：{node.macroId}',
   },
+
+  /* ---------------- src/core/parser.js（严格化诊断） ---------------- */
+  '无法识别的语句，已忽略': { en: 'Unrecognized statement, ignored', 'zh-Hant': '無法識別的陳述，已忽略' },
+  '无法识别的表达式，已忽略': { en: 'Unrecognized expression, ignored', 'zh-Hant': '無法識別的運算式，已忽略' },
 
   /* ---------------- src/core/store.js ---------------- */
   '该文件只读': { en: 'This file is read-only', 'zh-Hant': '該檔案為唯讀' },
@@ -164,6 +164,12 @@ export const MSG = {
   /* ---- 广播日志里的动词 ---- */
   '订阅': { en: 'subscribed to', 'zh-Hant': '訂閱' },
   '取消订阅': { en: 'unsubscribed from', 'zh-Hant': '取消訂閱' },
+
+  /* ---- 克隆体上限 ---- */
+  '克隆体数量已达上限（{_1}）': {
+    en: 'clone limit reached ({_1})',
+    'zh-Hant': '分身數量已達上限（{_1}）',
+  },
 
   /* ---- 写进导出文件的注释 ---- */
   '// 这个实体还没有脚本。回到积木视图拖一个「当收到 [update]」出来试试。\n':

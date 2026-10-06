@@ -45,10 +45,10 @@ app.whenReady().then(async () => {
   const playerWin = () => BrowserWindow.getAllWindows().find((w) => w !== win && !w.isDestroyed());
 
   /* ---- 1. 点按钮开窗 ---- */
-  console.log('\n=== 1. 点「⧉ 新窗口」 ===');
+  console.log('\n=== 1. 点「▶ 运行」（默认就是开独立窗口） ===');
   {
     const before = BrowserWindow.getAllWindows().length;
-    await run(`document.querySelector('#btn-player').click()`);
+    await run(`document.querySelector('#btn-run').click()`);
     let pw = null;
     for (let i = 0; i < 30 && !pw; i++) { await sleep(200); pw = playerWin(); }
     check('运行窗口开出来了', !!pw && BrowserWindow.getAllWindows().length === before + 1,
@@ -211,7 +211,7 @@ app.whenReady().then(async () => {
     let reset = false;
     for (let i = 0; i < 20 && !reset; i++) {
       await sleep(150);
-      reset = await run(`({ open: window.__tl.playerOpen, on: document.querySelector('#btn-player').classList.contains('on') })`)
+      reset = await run(`({ open: window.__tl.playerOpen, on: document.querySelector('#btn-run').classList.contains('on') })`)
         .then((r) => r.open === false && r.on === false).catch(() => false);
     }
     check('编辑器里按钮状态复位了', reset, 'playerOpen=false / 按钮去掉高亮');

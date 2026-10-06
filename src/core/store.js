@@ -9,7 +9,7 @@
  */
 
 import { t } from './i18n.js';
-import { cloneIR, createProject, uid } from './ir.js';
+import { cloneIR, createProject, uid, E } from './ir.js';
 import { generateFiles } from './codegen.js';
 import { parseFile } from './parser.js';
 import { BUILTIN_CATEGORIES, BUILTIN_CHANNELS } from './registry.js';
@@ -221,6 +221,38 @@ export class Store {
     });
   }
 
+  /**
+   * 设置实体父级（parent 层级）。parentName 为 null 表示取消父级。
+   * 拒绝：指向自己、指向自己的后代（防环）、指向舞台或不存在的实体。
+   * 返回 true 表示真的改了（commit 成功），false 表示被规则拦下或没变化。
+   */
+  setEntityParent(id, parentName) {
+    const ent = this.entityById(id);
+    if (!ent || ent.kind === 'stage') return false;
+    const norm = parentName ? String(parentName).trim() : null;
+    if (norm) {
+      const parent = this.entityByName(norm);
+      if (!parent || parent.kind === 'stage') return false;
+      if (parent.name === ent.name) return false;
+      // 防环：parent 不能是 ent 的后代（包括嵌套后代）
+      const seen = new Set([ent.name]);
+      const stack = [ent.name];
+      while (stack.length) {
+        const cur = stack.pop();
+        for (const e of this.project.entities) {
+          if (e.parent === cur && !seen.has(e.name)) { seen.add(e.name); stack.push(e.name); }
+        }
+      }
+      if (seen.has(parent.name)) return false;
+    }
+    if (ent.parent === norm) return false;
+    this.commit(t('设置父级'), (p) => {
+      const e = p.entities.find((x) => x.id === id);
+      if (e) e.parent = norm;
+    });
+    return true;
+  }
+
   addCategory({ id, name, color, icon, order, scope = 'project' }) {
     const cid = id || uid('cat');
     this.commit(t('新建分类 {_1}', { _1: name }), (p) => {
@@ -255,10 +287,77 @@ export class Store {
     return macro;
   }
 
+  /**
+   * 删掉一个合成积木。
+   *
+   * 调用点不能直接留着 —— 宏一没，那些节点就成了「指向不存在的宏」，
+   * 代码生成会变成 unknownMacro、IR 校验也会报警。按之前确认的方案，
+   * 调用点**直接删掉**（不再降级成代码积木）：宏定义本身已删除，调用点失去意义，
+   * 一并移除，不残留任何「执行代码」积木。
+   *
+   * 宏可以互相调用，所以别的宏体里对它的引用也要一起清掉。
+   *
+   * @returns {{removed:number}} 删除了几处调用点
+   */
   removeMacro(id) {
     const m = this.project.macros[id];
-    if (!m) return;
-    this.commit(t('删除积木「{_1}」', { _1: m.name }), (p) => { delete p.macros[id]; });
+    if (!m) return { removed: 0 };
+    let n = 0;
+    const isCall = (x) =>
+      x && (x.type === 'MacroCall' || x.type === 'MacroCallStatement') && x.macroId === id;
+    const walk = (x, inArray) => {
+      if (isCall(x)) {
+        n++;
+        // 语句位（直接挂在脚本/宏体序列里）整段删除；表达式位用占位 0 替换
+        return inArray ? undefined : E.num(0);
+      }
+      if (Array.isArray(x)) {
+        const out = [];
+        for (const item of x) {
+          const r = walk(item, true);
+          if (r !== undefined) out.push(r);
+        }
+        return out;
+      }
+      if (!x || typeof x !== 'object') return x;
+      for (const k of Object.keys(x)) x[k] = walk(x[k], false);
+      return x;
+    };
+    this.commit(t('删除积木「{_1}」', { _1: m.name }), (p) => {
+      for (const e of p.entities || []) for (const s of e.scripts || []) walk(s);
+      for (const other of Object.values(p.macros || {})) {
+        if (other.id === id) continue;
+        walk(other);
+      }
+      delete p.macros[id];
+    });
+    return { removed: n };
+  }
+
+  /**
+   * 删实体之前要先知道「会牵动什么」：它自己有几段脚本、别处引用了它几次。
+   *
+   * 引用是按**名字**存的（和重命名那套一致），所以按名字数节点。
+   * 订阅不在这里统计 —— 它是运行时的东西，UI 那一层自己问 rt。
+   */
+  entityRefInfo(id) {
+    const ent = this.entityById(id);
+    if (!ent) return { scripts: 0, refs: 0 };
+    const name = ent.name;
+    let refs = 0;
+    const count = (node) => {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) { node.forEach(count); return; }
+      // 引用这个实体的节点：目标实体 / 碰撞与距离的双方
+      if ((node.type === 'GetProp' || node.type === 'SetProp') && node.entity === name) refs++;
+      if ((node.type === 'Touching' || node.type === 'DistanceTo') && (node.a === name || node.b === name)) refs++;
+      for (const v of Object.values(node)) if (v && typeof v === 'object') count(v);
+    };
+    for (const e of this.project.entities || []) {
+      if (e.id === id) continue;
+      for (const s of e.scripts || []) count(s);
+    }
+    return { scripts: (ent.scripts || []).length, refs };
   }
 
   addChannel(name) {

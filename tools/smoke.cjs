@@ -199,8 +199,10 @@ app.whenReady().then(async () => {
     return { ok: true, detail: 'y=' + e.y.toFixed(1) };
   })()`);
 
-  await probe('点击运行后帧循环启动', `(async () => {
-    document.querySelector('#btn-run').click();
+  await probe('编辑器里的运行时：帧循环启动', `(async () => {
+    // 顶栏 ▶ 现在默认开独立窗口，编辑器里这份运行时留给逐帧调试和「点积木执行」，
+    // 所以用 __tl.startRun() 起它（和点积木执行走的是同一条路）
+    window.__tl.startRun();
     // 轮询而不是死等固定时长：首帧要等 rAF，机器忙的时候 700ms 不一定够
     const rt = window.__tl.rt;
     const t0 = performance.now();
@@ -702,9 +704,9 @@ app.whenReady().then(async () => {
     if (!ok) fail('方向键把页面滚动了');
   }
 
-  // ---- 全屏游玩 ----
+  // ---- 全屏游玩（顶栏不再有「全屏」按钮了，直接调内部入口）----
   {
-    await win.webContents.executeJavaScript(`document.querySelector('#btn-fullscreen').click()`);
+    await win.webContents.executeJavaScript(`window.__tl.toggleFullscreen(true)`);
     await new Promise((r) => setTimeout(r, 900));
     let sized = null;
     for (let i = 0; i < 20; i++) {
@@ -773,13 +775,14 @@ app.whenReady().then(async () => {
 
   // ------------------------------------------------------------------
   // 独立运行窗口
-  // 编辑器点一下，游戏应该在一个新窗口里跑起来，键盘能玩，关掉后按钮复位。
+  // 编辑器点一下 ▶ 运行，游戏应该在一个新窗口里跑起来，
+  // 键盘能玩，关掉后按钮复位。
   // ------------------------------------------------------------------
   {
     const sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
     const playerWin = () => BrowserWindow.getAllWindows().find((w) => w !== win && !w.isDestroyed());
     const before = BrowserWindow.getAllWindows().length;
-    await win.webContents.executeJavaScript(`document.querySelector('#btn-player').click()`);
+    await win.webContents.executeJavaScript(`document.querySelector('#btn-run').click()`);
     let pw = null;
     for (let i = 0; i < 30 && !pw; i++) { await sleep2(200); pw = playerWin(); }
     if (!pw) {
@@ -825,7 +828,7 @@ app.whenReady().then(async () => {
       for (let i = 0; i < 20 && !reset; i++) {
         await sleep2(150);
         reset = await win.webContents.executeJavaScript(
-          `({ open: window.__tl.playerOpen, on: document.querySelector('#btn-player').classList.contains('on') })`)
+          `({ open: window.__tl.playerOpen, on: document.querySelector('#btn-run').classList.contains('on') })`)
           .then((r) => r.open === false && r.on === false).catch(() => false);
       }
       const okClose = gone && reset;
@@ -878,7 +881,7 @@ app.whenReady().then(async () => {
         lang: tl.i18n.lang,
         run: (btn && btn.textContent || '').trim(),
         save: tl.i18n.t('保存'),
-        appearance: tl.i18n.t('外观'),
+        appearance: tl.i18n.t('设置'),
         langLabel: tl.i18n.t('界面语言'),
         stored: (() => { try { return localStorage.getItem('tanloom.lang'); } catch { return null; } })(),
       };
@@ -903,9 +906,9 @@ app.whenReady().then(async () => {
     console.log(`  ${okEn ? '✓' : '✖'} 切英语（重载后仍是英语＝选择已落盘）→ 顶栏「运行」=${en.run} · t('保存')=${en.save}`);
 
     const hant = await switchTo('zh-Hant');
-    const okHant = hant.lang === 'zh-Hant' && hant.save === '儲存' && hant.appearance === '外觀';
+    const okHant = hant.lang === 'zh-Hant' && hant.save === '儲存' && hant.appearance === '設定';
     if (!okHant) fail('切到繁体后没变繁体 / ' + JSON.stringify(hant));
-    console.log(`  ${okHant ? '✓' : '✖'} 切繁體 → t('保存')=${hant.save} · t('外观')=${hant.appearance} · t('界面语言')=${hant.langLabel}`);
+    console.log(`  ${okHant ? '✓' : '✖'} 切繁體 → t('保存')=${hant.save} · t('设置')=${hant.appearance} · t('界面语言')=${hant.langLabel}`);
 
     const back = await switchTo(before.lang);
     const okBack = back.lang === before.lang && back.save === before.save && back.run === before.run;

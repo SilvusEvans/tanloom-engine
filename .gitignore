@@ -4,3 +4,4 @@ tools/smoke.log
 *.tle
 tools/bubble.log
 tools/ui.log
+tools/theme.log

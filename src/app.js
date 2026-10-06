@@ -19,7 +19,8 @@ import { CodeEditor } from './code/editor.js';
 import { renderBroadcast, renderSubscribers, renderVars, renderPerf, renderConsole, renderHierarchy, renderInspector, renderAssets } from './ui/panels.js';
 import { openCategoryDialog } from './ui/macro-dialog.js';
 import { showModal, toast, hint, showInlineInput } from './ui/dialogs.js';
-import { Appearance, openAppearanceDialog } from './ui/appearance.js';
+import { Appearance, openSettingsDialog } from './ui/appearance.js';
+import { installMotion, playAxisY, setMotion, motionEnabled } from './ui/motion.js';
 import { generateFiles } from './core/codegen.js';
 import { attachKeyboardInput, preventButtonFocus, blurFocus, isTyping, isModalOpen } from './input/keys.js';
 
@@ -203,7 +204,6 @@ function toggleFullscreen(on) {
 
   const layer = $('fullscreen-layer');
   layer.classList.toggle('hidden', !want);
-  $('btn-fullscreen').classList.toggle('on', want);
 
   if (want) {
     if (!rt.isRunning()) {
@@ -283,9 +283,13 @@ $('dock-toggle').addEventListener('click', () => {
 /* 运行控制                                                            */
 /* ================================================================== */
 function updateRunButtons() {
-  $('btn-run').textContent = rt.isRunning() ? t('⏹ 停止') : t('▶ 运行');
+  // ▶ 的职责是「打开独立运行窗口」：窗口开着的时候，这一下的意思是关掉它。
+  // ⏸ / ⏭ / ⏹ 管的还是编辑器里那份运行时（逐帧调试用的）。
+  const b = $('btn-run');
+  b.textContent = playerOpen ? t('⏹ 停止') : t('▶ 运行');
+  b.classList.toggle('on', playerOpen);
 }
-/** 开始跑之前把焦点从按钮上摘掉，不然空格会去「点」那个还带着焦点的按钮 */
+/** 编辑器里启动。点积木执行时用它（脚本需要帧循环活着才跑得动） */
 function startRun() {
   try { rt.load(store.project); } catch (e) { window.__bootErr = String(e && e.stack || e); console.error(t('rt.load 失败'), e); }
   rt.start();
@@ -293,8 +297,9 @@ function startRun() {
   updateRunButtons();
 }
 $('btn-run').addEventListener('click', () => {
-  if (rt.isRunning()) { rt.stop(); toast(t('已停止')); updateRunButtons(); }
-  else startRun();
+  // 运行默认是「在独立窗口里玩」；再点一下就是把它关掉
+  if (playerOpen) closePlayerWindow();
+  else openPlayerWindow();
 });
 $('btn-pause').addEventListener('click', () => {
   if (!rt.running) return;
@@ -305,7 +310,13 @@ $('btn-step').addEventListener('click', () => {
   rt.stepOnce();
   updateRunButtons();
 });
-$('btn-stop').addEventListener('click', () => { rt.stop(); try { rt.load(store.project); } catch (e) { window.__bootErr = String(e && e.stack || e); console.error(t('rt.load 失败'), e); } updateRunButtons(); refreshDock(); });
+$('btn-stop').addEventListener('click', () => {
+  rt.stop();
+  // 停止＝全都停下：独立运行窗口也一起关掉
+  if (playerOpen) closePlayerWindow();
+  try { rt.load(store.project); } catch (e) { window.__bootErr = String(e && e.stack || e); console.error(t('rt.load 失败'), e); }
+  updateRunButtons(); refreshDock();
+});
 
 /* ================================================================== */
 /* 独立运行窗口                                                        */
@@ -337,24 +348,25 @@ async function openPlayerWindow() {
   }).catch(() => false);
   if (!ok) { toast(t('没能打开运行窗口'), 'warn'); return; }
   playerOpen = true;
-  $('btn-player').classList.add('on');
+  updateRunButtons();
   toast(t('已在独立窗口里运行 · 编辑器这边的预览已停下；改了积木那边会热重载'), 'ok', 4200);
+}
+
+/** 关掉运行窗口。这里乐观地先更新按钮，不等 IPC 回执 —— 点了就该立刻有反应 */
+function closePlayerWindow() {
+  if (window.tanloom && window.tanloom.closePlayer) window.tanloom.closePlayer().catch(() => {});
 }
 
 function markPlayerClosed() {
   playerOpen = false;
-  $('btn-player').classList.remove('on');
+  updateRunButtons();
 }
-
-$('btn-player').addEventListener('click', () => {
-  if (playerOpen) window.tanloom.closePlayer().catch(() => {});   // 再点一次＝关掉
-  else openPlayerWindow();
-});
 
 /* ================================================================== */
 /* 全屏游玩                                                            */
+/* 顶栏已经没有「全屏」按钮了 —— 运行默认走独立窗口，全屏归那边的窗口自己管。
+   这一层还在（可以用 __tl.toggleFullscreen 进去），所以也别忘了退出时复位的入口。 */
 /* ================================================================== */
-$('btn-fullscreen').addEventListener('click', () => toggleFullscreen(true));
 $('btn-fs-exit').addEventListener('click', () => toggleFullscreen(false));
 $('btn-fs-native').addEventListener('click', async () => {
   if (!window.tanloom || !window.tanloom.setFullScreen) {
@@ -451,6 +463,12 @@ function pickFile() {
 }
 
 /* ================================================================== */
+/* 设置（外观：主题 / 重点色 / 字体 / 语言 / 代码区）                    */
+/* ================================================================== */
+/** 「设置」对话框：顶栏按钮和 Ctrl+, 都走这里 */
+function openSettings() { openSettingsDialog(appearance); }
+
+/* ================================================================== */
 /* 帮助                                                                */
 /* ================================================================== */
 $('btn-help').addEventListener('click', () => {
@@ -463,18 +481,13 @@ document.addEventListener('keydown', (e) => {
   // 在输入框里打字时完全不介入（含 Blockly 的字段编辑框、对话框里的输入）
   if (isTyping(e.target)) return;
   const mod = e.ctrlKey || e.metaKey;
-  if (e.key === 'Escape') {
-    // 全屏时 Esc 先用来退出全屏；对话框自己会处理其余的 Esc
-    if (fullscreen && !isModalOpen()) { e.preventDefault(); toggleFullscreen(false); }
-    return;
-  }
-  if (e.key === 'F11') { e.preventDefault(); toggleFullscreen(); return; }
-  if (e.key === 'F6') { e.preventDefault(); $('btn-player').click(); return; }
+  // 已经没有顶栏全屏按钮了；Esc 归对话框自己处理
+  if (e.key === 'Escape') return;
   if (e.key === 'F5') { e.preventDefault(); $('btn-run').click(); }
   else if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); store.undo(); if (ws) ws.refresh(true); }
   else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); store.redo(); if (ws) ws.refresh(true); }
   else if (mod && e.key.toLowerCase() === 'e') { e.preventDefault(); exportCode(); }
-  else if (mod && e.key === ',') { e.preventDefault(); openAppearanceDialog(appearance); }
+  else if (mod && e.key === ',') { e.preventDefault(); openSettings(); }
   else if (mod && e.key.toLowerCase() === 's') {
     e.preventDefault();
     if (currentView === 'code' && editor.hasUnsaved()) editor.save();
@@ -505,6 +518,8 @@ $('view-assets').addEventListener('click', (e) => {
 /* 初始化                                                             */
 /* ================================================================== */
 function boot() {
+  // 动效钩子：先把切停靠面板那一路挂上（只会监听 class 变化，不参与业务）
+  installMotion();
   // HTML 里的静态文案（index.html 上标了 data-i18n 的那些）
   localizeDom();
   // 按钮点完不留焦点：点过「运行」之后按空格会把它再点一次（＝暂停），游戏就没法玩了
@@ -518,10 +533,16 @@ function boot() {
   ws = new ScratchWorkspace($('blockly-host'), store, {
     onChange: afterChange,
     rt,
+    // 积木画布与代码编辑区共用一份「编辑区主题」：这里只给取值函数，
+    // 主题换了由 appearance.onChange 推下来，两者永远同深同浅
+    area: () => appearance.editTheme.ws,
     // 没在运行时点积木：先按一次「运行」再执行它（脚本是帧循环驱动的，
     // 「等待」「一直重复」都需要循环活着才成立）
     onAutoRun: startRun,
   });
+  // 外观一变就把新表面色推进积木画布（换主题 / 换重点色 / 切深浅都会到这里），
+  // 这一处是全捉 —— 不用在每个 setXxx 底下补一句
+  appearance.onChange(() => { if (ws) ws.applyEditTheme(appearance.editTheme.ws); });
   stageView = new StageView($('stage-canvas'), store, () => rt);
   stageView.onPick = (id) => selectEntity(id);
   stageViewBig = new StageView($('stage-canvas-big'), store, () => rt);
@@ -538,7 +559,7 @@ function boot() {
   $('btn-code-sync').addEventListener('click', () => editor.save());
   $('btn-code-revert').addEventListener('click', () => editor.revert());
   $('btn-ws-fit').addEventListener('click', () => ws.zoomToFit());
-  $('btn-appearance').addEventListener('click', () => openAppearanceDialog(appearance));
+  $('btn-settings').addEventListener('click', openSettings);
 
   rt.log(t('Tanloom Engine 已就绪 · 点 ▶ 运行示例项目'), 'ok');
   fillEntitySelect();
@@ -562,7 +583,7 @@ function boot() {
   }
   if (window.tanloom && window.tanloom.playerStatus) {
     window.tanloom.playerStatus().then((open) => {
-      if (open) { playerOpen = true; $('btn-player').classList.add('on'); }
+      if (open) { playerOpen = true; updateRunButtons(); }
     }).catch(() => {});
   }
 
@@ -573,15 +594,21 @@ function boot() {
   window.__tl = {
     store, rt, ws, editor, stageView, stageViewBig, stageViewFs, appearance,
     blockdefs, scratchDefs, scratchSync,
-    generateFiles, Blockly, toggleFullscreen, openPlayerWindow,
+    generateFiles, Blockly, toggleFullscreen, openPlayerWindow, closePlayerWindow,
+    // 编辑器里那份运行时的启动入口：点积木执行、单步调试走这条路
+    // （顶栏 ▶ 已经是「开独立窗口」了）
+    startRun, openSettings,
     i18n: { lang, setLang, LANGS, t },
-    openAppearanceDialog: () => openAppearanceDialog(appearance),
+    openAppearanceDialog: () => openSettings(),
+    // 动效：installMotion 已经跑过了（见 boot 里那一行）；这里把手柄留给探针，
+    // 方便单独验证「关掉动画后确实不动」
+    motion: { installMotion, playAxisY, setMotion, enabled: motionEnabled },
     get playerOpen() { return playerOpen; },
     get fullscreen() { return fullscreen; },
   };
 
   // 示例提示
-  setTimeout(() => toast(t('示例项目已载入：按 ▶ 或 F5 试玩，F11 全屏；也可以直接点积木执行它'), 'info', 5200), 500);
+  setTimeout(() => toast(t('示例项目已载入：按 ▶ 或 F5 会开一个窗口来玩；也可以直接点积木执行它'), 'info', 5200), 500);
 }
 
 boot();

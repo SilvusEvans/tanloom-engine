@@ -135,6 +135,18 @@ export const UI = {
   '初始可见': { en: 'Visible at start', 'zh-Hant': '初始可見' },
   '标记为舞台': { en: 'Mark as stage', 'zh-Hant': '標記為舞台' },
   '删除这个实体': { en: 'Delete this entity', 'zh-Hant': '刪除這個實體' },
+  '删除实体': { en: 'Delete entity', 'zh-Hant': '刪除實體' },
+  '设置父级': { en: 'Set parent', 'zh-Hant': '設定父級' },
+  '把实体拖到这里可取消父子关系': { en: 'Drop an entity here to unparent it', 'zh-Hant': '把實體拖到這裡可取消父子關係' },
+  '删除「{_1}」？': { en: 'Delete "{_1}"?', 'zh-Hant': '刪除「{_1}」？' },
+  '它有 {_1} 段脚本、被别处引用 {_2} 次、运行时有 {_3} 条订阅。删除后，这些脚本和订阅会一起消失。': {
+    en: 'It has {_1} script(s), is referenced {_2} time(s) elsewhere, and has {_3} subscription(s) at runtime. Deleting removes those scripts and subscriptions together.',
+    'zh-Hant': '它有 {_1} 段腳本、被別處引用 {_2} 次、執行時有 {_3} 條訂閱。刪除後，這些腳本和訂閱會一起消失。',
+  },
+  '别处对它的引用会留在原地（改成谁都不合适）；删错了可以 Ctrl+Z 撤销。': {
+    en: 'References to it elsewhere are left in place (there is no right substitute); you can undo with Ctrl+Z.',
+    'zh-Hant': '別處對它的引用會留在原地（改成誰都不合適）；刪錯了可以 Ctrl+Z 復原。',
+  },
   '初始化值': { en: 'Initial value', 'zh-Hant': '初始值' },
   '修改变量': { en: 'Change variable', 'zh-Hant': '變更變數' },
   '重命名': { en: 'Rename', 'zh-Hant': '重新命名' },
@@ -179,9 +191,9 @@ export const UI = {
   '表达式（返回值）': { en: 'Expression (returns a value)', 'zh-Hant': '運算式（傳回值）' },
   '语句（执行动作）': { en: 'Statement (performs an action)', 'zh-Hant': '陳述式（執行動作）' },
   '事件（组合帽块）': { en: 'Event (hat block)', 'zh-Hant': '事件（組合帽塊）' },
-  '实现已经换成对应的占位代码积木，保存后在积木上直接改': {
-    en: 'The implementation was swapped for the matching placeholder code block - edit it right on the block after saving',
-    'zh-Hant': '實作已經換成對應的佔位程式碼積木，儲存後在積木上直接改',
+  '实现已换成占位积木，保存后在积木视图里直接搭': {
+    en: 'Implementation reset to a placeholder block; build it in the blocks view after saving',
+    'zh-Hant': '實作已換成占位積木，儲存後在積木視圖裡直接搭建',
   },
   '仅本角色': { en: 'This sprite only', 'zh-Hant': '僅本角色' },
   '项目': { en: 'Project', 'zh-Hant': '專案' },
@@ -258,6 +270,9 @@ export const UI = {
   'Nord · 极地': { en: 'Nord · Polar', 'zh-Hant': 'Nord · 極地' },
   '晨曦 · 白': { en: 'Dawn · White', 'zh-Hant': '晨曦 · 白' },
   'Solarized · 纸': { en: 'Solarized · Paper', 'zh-Hant': 'Solarized · 紙' },
+  'Material You · 暗': { en: 'Material You · Dark', 'zh-Hant': 'Material You · 暗' },
+  'Material You · 亮': { en: 'Material You · Light', 'zh-Hant': 'Material You · 亮' },
+  'Material You · 生动': { en: 'Material You · Vivid', 'zh-Hant': 'Material You · 生動' },
   '蓝': { en: 'Blue', 'zh-Hant': '藍' },
   '紫': { en: 'Purple', 'zh-Hant': '紫' },
   '品红': { en: 'Magenta', 'zh-Hant': '洋紅' },
@@ -276,7 +291,6 @@ export const UI = {
   '界面字号': { en: 'UI font size', 'zh-Hant': '介面字型大小' },
   '代码字体': { en: 'Code font', 'zh-Hant': '程式碼字型' },
   '代码字号': { en: 'Code font size', 'zh-Hant': '程式碼字型大小' },
-  '预览': { en: 'Preview', 'zh-Hant': '預覽' },
   '分享码': { en: 'Share code', 'zh-Hant': '分享碼' },
   '把一套外观发给别人：点「生成分享码」复制走；拿到别人的就粘到这里点「应用分享码」': {
     en: 'Send a whole look to someone: click "Generate share code" and copy it; if someone sent you one, paste it here and click "Apply share code"',
@@ -291,15 +305,56 @@ export const UI = {
     en: 'This share code is not recognized (none of its fields are known)',
     'zh-Hant': '這個分享碼認不出來（一個欄位都不認識）',
   },
-  '外观只影响编辑器界面，不会写进项目文件 —— 换台机器打开同一个游戏，样式各自保留。<br>': {
-    en: 'Appearance only affects the editor interface and is never written to the project file - open the same game on another machine and each keeps its own styling.<br>',
-    'zh-Hant': '外觀只影響編輯器介面，不會寫進專案檔案 —— 換台機器開啟同一個遊戲，樣式各自保留。<br>',
+  '这些都是编辑器自己的偏好，不会写进项目文件 —— 换台机器打开同一个游戏，样式各自保留。<br>': {
+    en: 'These are preferences of your editor and are never written to the project file - open the same game on another machine and each keeps its own styling.<br>',
+    'zh-Hant': '這些都是編輯器自己的偏好，不會寫進專案檔案 —— 換台機器開啟同一個遊戲，樣式各自保留。<br>',
   },
-  '积木颜色是 Scratch 官方分类色，不跟着换；独立运行窗口和全屏游玩也保持深色，那是游戏画面。': {
-    en: 'Block colors are the official Scratch category colors and do not change with the theme; the separate run window and fullscreen play stay dark as well - that is the game screen.',
-    'zh-Hant': '積木顏色是 Scratch 官方分類色，不跟著換；獨立執行視窗和全螢幕遊玩也保持深色，那是遊戲畫面。',
+  '在 Material You 主题下，重点色就是「种子」—— 换一个颜色，整套界面会照着它重新长一遍。': {
+    en: 'Under a Material You theme the accent is the "seed" - pick another color and the whole interface is regenerated from it.',
+    'zh-Hant': '在 Material You 主題下，重點色就是「種子」—— 換一個顏色，整套介面會照著它重新長一遍。',
   },
-  '外观 · 编辑器': { en: 'Appearance · Editor', 'zh-Hant': '外觀 · 編輯器' },
+  '积木画布与代码区共用「编辑区主题」，不选就是跟随界面主题；积木本身的分类色是 Scratch 官方色，不跟着换。': {
+    en: 'The block canvas and the code area share one "editing theme" (leave it unset to follow the interface theme); the category colors on blocks themselves are the official Scratch colors and never change.',
+    'zh-Hant': '積木畫布與程式碼區共用「編輯區主題」，不選就是跟隨介面主題；積木本身的分類色是 Scratch 官方色，不跟著換。',
+  },
+  '设置 · 编辑器': { en: 'Settings · Editor', 'zh-Hant': '設定 · 編輯器' },
+  '设置': { en: 'Settings', 'zh-Hant': '設定' },
+  '设置：主题 / 字体 / 语言 / 积木与代码 (Ctrl+,)': {
+    en: 'Settings: theme / fonts / language / blocks & code (Ctrl+,)',
+    'zh-Hant': '設定：主題 / 字型 / 語言 / 積木與程式碼 (Ctrl+,)',
+  },
+
+  /* ---- 编辑区主题：积木画布与代码区共用的一套配色 ---- */
+  '积木与代码': { en: 'Blocks & code', 'zh-Hant': '積木與程式碼' },
+  '编辑区主题': { en: 'Editing theme', 'zh-Hant': '編輯區主題' },
+  '积木画布和代码区共用这一套：换一个，两个编辑区一起变，不会一个深一个浅。': {
+    en: 'The block canvas and the code area share it: change one and both editors change together, never one dark and one light.',
+    'zh-Hant': '積木畫布和程式碼區共用這一套：換一個，兩個編輯區一起變，不會一個深一個淺。',
+  },
+  '跟随界面主题': { en: 'Follow interface theme', 'zh-Hant': '跟隨介面主題' },
+  '夜幕 · 靛': { en: 'Nightfall · Indigo', 'zh-Hant': '夜幕 · 靛' },
+  '德古拉': { en: 'Dracula', 'zh-Hant': '德古拉' },
+  'Solarized · 暗': { en: 'Solarized · Dark', 'zh-Hant': 'Solarized · 暗' },
+  'GitHub · 白': { en: 'GitHub · Light', 'zh-Hant': 'GitHub · 白' },
+  '暖阳 · 纸': { en: 'Sunlight · Paper', 'zh-Hant': '暖陽 · 紙' },
+  '示例项目已载入：按 ▶ 或 F5 会开一个窗口来玩；也可以直接点积木执行它': {
+    en: 'Sample project loaded: press ▶ or F5 to play it in a separate window; you can also click a block to run it directly',
+    'zh-Hant': '範例專案已載入：按 ▶ 或 F5 會開一個視窗來玩；也可以直接點積木執行它',
+  },
+
+  /* ---- 顶栏运行区的按钮提示（独立窗口成了默认玩法）---- */
+  '在独立窗口里运行 (F5)': {
+    en: 'Run in a separate window (F5)',
+    'zh-Hant': '在獨立視窗裡執行 (F5)',
+  },
+  '暂停（编辑器里的逐帧调试）': {
+    en: 'Pause (step debugging in the editor)',
+    'zh-Hant': '暫停（編輯器裡的逐幀除錯）',
+  },
+  '停止（也会关掉运行窗口）': {
+    en: 'Stop (also closes the run window)',
+    'zh-Hant': '停止（也會關掉執行視窗）',
+  },
   '完成': { en: 'Done', 'zh-Hant': '完成' },
   '恢复默认': { en: 'Restore defaults', 'zh-Hant': '恢復預設' },
 
@@ -308,6 +363,11 @@ export const UI = {
   '来自 {_1} · 参数 {_2} · {_3} 个订阅者':
     { en: 'from {_1} · value {_2} · {_3} subscribers', 'zh-Hant': '來自 {_1} · 參數 {_2} · {_3} 個訂閱者' },
   '自定义': { en: 'custom', 'zh-Hant': '自訂' },
+  '阶段': { en: 'phase', 'zh-Hant': '階段' },
+  '事件': { en: 'event', 'zh-Hant': '事件' },
+  '生命周期': { en: 'lifecycle', 'zh-Hant': '生命週期' },
+  '输入': { en: 'input', 'zh-Hant': '輸入' },
+  '物理': { en: 'physics', 'zh-Hant': '物理' },
 
   /* ---- 对话框里的示例代码（注释跟着界面语言走）---- */
   '\n// 例：self.x += 10;': { en: '\n// example: self.x += 10;', 'zh-Hant': '\n// 例：self.x += 10;' },

@@ -44,14 +44,34 @@ export function categoryLabel(cat) {
 
 /** 帧循环阶段广播 —— 借鉴 Godot 的 _process / _physics_process 阶段划分 */
 export const BUILTIN_CHANNELS = [
-  { name: 'frame_start',    order: 0, repeat: 'once',  doc: '帧开始，早于一切输入与逻辑' },
-  { name: 'input',          order: 1, repeat: 'once',  doc: '收集输入后广播' },
-  { name: 'physics_update', order: 2, repeat: 'fixed', doc: '固定步长物理更新（一帧可能多次）' },
-  { name: 'update',         order: 3, repeat: 'once',  doc: '主逻辑 / 动画 / AI' },
-  { name: 'late_update',    order: 4, repeat: 'once',  doc: '相机跟随等依赖最终位置的逻辑' },
-  { name: 'render',         order: 5, repeat: 'once',  doc: '绘制提交' },
-  { name: 'frame_end',      order: 6, repeat: 'once',  doc: '帧结束，收尾与统计' }
+  { name: 'frame_start',    order: 0,   repeat: 'once',  doc: '帧开始，早于一切输入与逻辑' },
+  { name: 'lifecycle',      order: 0.5, repeat: 'once',  doc: '生命周期事件（克隆、点击、销毁）' },
+  { name: 'input',          order: 1,   repeat: 'once',  doc: '收集输入后广播' },
+  { name: 'physics_update', order: 2,   repeat: 'fixed', doc: '固定步长物理更新（一帧可能多次）' },
+  { name: 'update',         order: 3,   repeat: 'once',  doc: '主逻辑 / 动画 / AI' },
+  { name: 'late_update',    order: 4,   repeat: 'once',  doc: '相机跟随等依赖最终位置的逻辑' },
+  { name: 'render',         order: 5,   repeat: 'once',  doc: '绘制提交' },
+  { name: 'frame_end',      order: 6,   repeat: 'once',  doc: '帧结束，收尾与统计' }
 ];
+
+/** 内部事件频道 —— 事件源产生，用户不能手动发，但可以订阅（通过帽块） */
+export const INTERNAL_CHANNELS = [
+  { name: '_start',     kind: 'lifecycle', order: -10, doc: '项目开始运行' },
+  { name: '_clone',     kind: 'lifecycle', order: -9,  doc: '作为克隆体启动' },
+  { name: '_destroy',   kind: 'lifecycle', order: -8,  doc: '克隆体被删除' },
+  { name: '_scene',     kind: 'lifecycle', order: -7,  doc: '切换场景' },
+  { name: '_key',       kind: 'input',     order: 10,  doc: '按下键盘按键' },
+  { name: '_click',     kind: 'input',     order: 11,  doc: '点击舞台上的实体' },
+  { name: '_collision', kind: 'physics',   order: 20,  doc: '两个实体开始碰撞' },
+];
+
+/** 频道类型：phase 阶段 / event 内部事件 / user 自定义 */
+export function channelKind(name) {
+  if (name === '_manual' || name === '_eval') return 'internal';
+  if (BUILTIN_CHANNELS.some((c) => c.name === name)) return 'phase';
+  if (INTERNAL_CHANNELS.some((c) => c.name === name)) return 'event';
+  return 'user';
+}
 
 /** Scratch 风格按键下拉项 → KeyboardEvent.code */
 export const KEY_OPTIONS = [

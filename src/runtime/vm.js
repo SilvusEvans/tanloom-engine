@@ -21,7 +21,7 @@ const PHASE_CHANNELS = new Set(BUILTIN_CHANNELS.map((c) => c.name));
 const DEFAULT_KEYS_OK = true;
 
 /* ================================================================== */
-/* 上下文：每次脚本执行一份，暴露给积木的 run() 和代码积木                  */
+/* 上下文：每次脚本执行一份，暴露给积木的 run() 和生成代码                  */
 /* ================================================================== */
 class Ctx {
   constructor(rt, thread) {
@@ -106,6 +106,7 @@ export class Runtime {
     this._manualThreads = new Map();   // 实体名 → 手动执行的线程（点击积木触发）
     this._subscriptions = Object.create(null);   // channel -> [sub]
     this._subByChannel = Object.create(null);
+    this._eventQueue = [];            // 帧外/半帧事件统一入队，在固定相位派发
   }
 
   /* ---------------------------------------------------------------- */
@@ -141,49 +142,97 @@ export class Runtime {
     this.__diag = { reset: (this.__diag ? this.__diag.reset : 0) + 1, spawn: 0, remove: 0 };
     for (const def of p.entities || []) {
       if (def.kind === 'group') continue;
-      this.spawnFromDef(def, false);
+      this.spawnProto(def, {}, true);
       this.__diag.spawn++;
     }
+    this.linkParents();
     this.buildSubscriptions();
     this.log(t('已加载项目「{_1}」，实体 {_2} 个', { _1: p.name, _2: this.state.order.length }), 'info');
   }
 
-  spawnFromDef(def, isClone, over) {
+  /**
+   * 唯一的实体实例化入口。项目里的每个定义都是原型；运行时里跑的每个实体都是
+   * 这个原型的「克隆体」，只是原型自己的那份实例带 `isPrototypeInstance=true`。
+   */
+  spawnProto(protoDef, over = {}, isPrototypeInstance = false) {
     const ent = {
-      phyOn: !!(def.physics && def.physics.enabled),
-      name: isClone ? `${def.name}#${Math.floor(Math.random() * 900 + 100)}` : def.name,
-      protoName: def.name,
-      irId: def.id,
-      kind: def.kind,
-      x: def.x, y: def.y,
-      dir: def.dir, size: def.size, opacity: def.opacity,
-      visible: def.visible,
-      rotationStyle: def.rotationStyle,
-      color: def.render ? def.render.color : '#4C97FF',
-      stroke: def.render ? def.render.stroke : '#3373CC',
-      shape: def.render ? def.render.shape : 'box',
-      w: def.render ? def.render.width : 48,
-      h: def.render ? def.render.height : 48,
-      label: def.render ? def.render.label : '',
-      tags: def.tags || [],
-      solid: def.solid === true || (def.tags || []).includes('solid'),
+      phyOn: !!(protoDef.physics && protoDef.physics.enabled),
+      name: isPrototypeInstance ? protoDef.name : `${protoDef.name}#${Math.floor(Math.random() * 900 + 100)}`,
+      protoName: protoDef.name,
+      irId: protoDef.id,
+      kind: protoDef.kind,
+      x: protoDef.x, y: protoDef.y,
+      dir: protoDef.dir, size: protoDef.size, opacity: protoDef.opacity,
+      visible: protoDef.visible,
+      rotationStyle: protoDef.rotationStyle,
+      color: protoDef.render ? protoDef.render.color : '#4C97FF',
+      stroke: protoDef.render ? protoDef.render.stroke : '#3373CC',
+      shape: protoDef.render ? protoDef.render.shape : 'box',
+      w: protoDef.render ? protoDef.render.width : 48,
+      h: protoDef.render ? protoDef.render.height : 48,
+      label: protoDef.render ? protoDef.render.label : '',
+      tags: protoDef.tags || [],
+      solid: protoDef.solid === true || (protoDef.tags || []).includes('solid'),
       vx: 0, vy: 0,
-      gravity: (def.physics && def.physics.gravity) || 0,
-      bounce: (def.physics && def.physics.bounce) || 0,
-      drag: (def.physics && def.physics.drag) != null ? def.physics.drag : 1,
+      gravity: (protoDef.physics && protoDef.physics.gravity) || 0,
+      bounce: (protoDef.physics && protoDef.physics.bounce) || 0,
+      drag: (protoDef.physics && protoDef.physics.drag) != null ? protoDef.physics.drag : 1,
       grounded: false,
       anim: 'idle',
       bubble: null,
       alive: true,
-      isClone: !!isClone,
-      cloneOf: isClone ? def.name : null,
-      scripts: def.scripts || [],
-      irDef: def
+      isClone: true,
+      isPrototypeInstance: !!isPrototypeInstance,
+      cloneOf: protoDef.name,
+      proto: protoDef,
+      parentRef: null,                 // 运行时父级实体引用（由 linkParents 在 spawn 后填）
+      prevX: protoDef.x, prevY: protoDef.y,   // 上一帧世界坐标，用于把父级位移增量传给子级
+      scripts: protoDef.scripts || [],
+      irDef: protoDef
     };
-    if (over) Object.assign(ent, over);
+    Object.assign(ent, over);
     this.state.entities[ent.name] = ent;
     this.state.order.push(ent.name);
     return ent;
+  }
+
+  /**
+   * 把 IR 里的 `parent`（实体名）解析成运行时引用。所有实体 spawn 完之后再调一次，
+   * 这样「子实体定义在父实体之前」也能正确挂上。克隆体若原型本身挂了父级，
+   * 也会挂到同一个父级下面。
+   */
+  linkParents() {
+    for (const name of this.state.order) {
+      const e = this.state.entities[name];
+      if (!e || e.parentRef) continue;
+      const pn = e.irDef && e.irDef.parent;
+      if (!pn) continue;
+      const parent = this.state.entities[pn];
+      if (parent && parent.alive) e.parentRef = parent;
+    }
+  }
+
+  /**
+   * 运行时 `parent` 层级：把「父级这一帧的位移增量」加到子级身上。
+   * 这样子级既跟随父级移动，又可以用积木/代码自己再移动（两种视图完全一致），
+   * 且完全不改运动代码、codegen、parser。父先于子处理，多级嵌套一帧内就跟得上。
+   */
+  applyParenting() {
+    const order = this.state.order;
+    const depth = (name) => {
+      let d = 0, e = this.state.entities[name];
+      while (e && e.parentRef) { d++; e = e.parentRef; }
+      return d;
+    };
+    const sorted = order.slice().sort((a, b) => depth(a) - depth(b));
+    for (const name of sorted) {
+      const e = this.state.entities[name];
+      if (!e || !e.parentRef) continue;
+      // 父级已死 → 解绑，子级留在当前世界坐标、变成独立实体
+      if (!e.parentRef.alive) { e.parentRef = null; continue; }
+      e.x += e.parentRef.x - e.parentRef.prevX;
+      e.y += e.parentRef.y - e.parentRef.prevY;
+    }
   }
 
   /* ---------------------------------------------------------------- */
@@ -210,6 +259,8 @@ export class Runtime {
           case 'OnClick': sub.channel = '_click'; sub.a = hat.entity || '$self'; break;
           case 'OnCollision': sub.channel = '_collision'; sub.a = hat.a; sub.b = hat.b; break;
           case 'OnClone': sub.channel = '_clone'; break;
+          case 'OnDestroyed': sub.channel = '_destroy'; break;
+          case 'OnScene': sub.channel = '_scene'; break;
           default: sub.channel = hat.channel || 'update'; break;
         }
         add(sub.channel, sub);
@@ -352,7 +403,8 @@ export class Runtime {
 
     const runPhase = (name, extra) => {
       const s = performance.now();
-      this._dispatch(name, realDelta, extra);
+      if (name === 'lifecycle') this._dispatchEvents('lifecycle');
+      else this._dispatch(name, realDelta, extra);
       const cost = performance.now() - s;
       tl.stages.push({ name, ms: +cost.toFixed(2), subs: this.subscribersOf(name).length });
       const st = this.channelStats[name] = this.channelStats[name] || { calls: 0, ms: 0, subs: 0 };
@@ -362,8 +414,12 @@ export class Runtime {
     // FrameStart
     runPhase('frame_start');
 
+    // Lifecycle 事件：点击 / 克隆 / 销毁 / 切场景（上一帧入队，本帧派发）
+    runPhase('lifecycle');
+
     // Input
     this._emitKeyEdges();
+    this._dispatchEvents('key');
     runPhase('input');
 
     // PhysicsUpdate（固定步长，一帧可能多次）
@@ -380,7 +436,10 @@ export class Runtime {
 
     // Update
     runPhase('update');
+    // parent 层级：把父级本帧位移增量传给子级（碰撞/渲染用的都是跟随后的坐标）
+    this.applyParenting();
     this.detectCollisions();
+    this._dispatchEvents('collision');
 
     // LateUpdate
     this.updateCamera(realDelta);
@@ -402,7 +461,19 @@ export class Runtime {
     // 预算不足时丢掉本帧剩余线程
     for (const name of Object.keys(this.state.entities)) {
       const e = this.state.entities[name];
-      if (!e.alive) this.removeEntity(name);
+      if (!e.alive) {
+        if (e.isClone && !e.isPrototypeInstance) {
+          const idx = this.state.clones.indexOf(name);
+          if (idx >= 0) this.state.clones.splice(idx, 1);
+        }
+        this.removeEntity(name);
+      }
+    }
+
+    // 记录本帧末世界坐标，供下一帧 applyParenting 计算父级位移增量
+    for (const name of Object.keys(this.state.entities)) {
+      const e = this.state.entities[name];
+      if (e && e.alive) { e.prevX = e.x; e.prevY = e.y; }
     }
   }
 
@@ -444,8 +515,8 @@ export class Runtime {
 
   _fire(sub, channel, value, singleThread) {
     // 被「将 XX 广播订阅状态设为 取消订阅」关掉的订阅：直接不响应。
-    // 判断放在这里而不是 _dispatch，是因为按键 / 碰撞 / 点击这些走的是别的派发路径，
-    // 放这儿一处就能全覆盖。
+    // 判断放在这里而不是 _dispatch，是因为所有派发最终都走 _fire，
+    // 放这儿一处就能全覆盖（阶段、按键、碰撞、点击、克隆、用户广播）。
     if (sub.muted) return;
     // 阶段频道：只有当脚本「真的挂起在等待中」时才跳过，
     // 这样一帧内的多次阶段广播（如多个 physics_update 子步）都能正常派发，
@@ -458,7 +529,7 @@ export class Runtime {
     this._runThread(self, sub.script, channel, value, sub);
 
     const st = this.channelStats[channel] = this.channelStats[channel] || { calls: 0, ms: 0, subs: 0 };
-    st.ms += performance.now() - t0;
+    st.calls++; st.ms += performance.now() - t0; st.subs = this.subscribersOf(channel).length;
   }
 
   /**
@@ -672,6 +743,33 @@ export class Runtime {
   /* ---------------------------------------------------------------- */
   /* 广播                                                              */
   /* ---------------------------------------------------------------- */
+  /**
+   * 事件源调用：把一条消息排进队列，由 step() 在固定相位统一派发。
+   * 这是「一切皆广播」规则的核心 —— 点击、克隆、按键、碰撞、生命周期
+   * 全部走同一条总线，自动获得单线程语义 / muted / halted / 预算 / 统计。
+   * @param {string} channel 频道名
+   * @param {number} value   载荷（默认 0）
+   * @param {object|null} source 来源实体（用于日志）
+   * @param {object|null} extra  匹配订阅用的字段：{ key }, { entity }, { a, b }
+   * @param {string} phase   在哪一个相位派发：'lifecycle' | 'key' | 'collision'
+   */
+  emit(channel, value = 0, source = null, extra = null, phase = 'lifecycle') {
+    if (this.halted && channel !== '_start') return;
+    this._eventQueue.push({ channel, value, source, extra, phase });
+    const subs = this.subscribersOf(channel);
+    if (this.logs.length < 4000) this.logEvent(channel, value, source, subs.length);
+  }
+
+  /** 把指定 phase 的排队事件一次性派发 */
+  _dispatchEvents(phase) {
+    const kept = [];
+    for (const e of this._eventQueue) {
+      if (e.phase === phase) this._dispatch(e.channel, this.delta, e.extra);
+      else kept.push(e);
+    }
+    this._eventQueue = kept;
+  }
+
   broadcast(channel, value, source) {
     const t0 = performance.now();
     this._ensureChannel(channel);
@@ -729,7 +827,7 @@ export class Runtime {
       if (def.kind === 'group') continue;
       alive.add(def.name);
       const e = this.state.entities[def.name];
-      if (!e) { this.spawnFromDef(def, false); continue; }
+      if (!e) { this.spawnProto(def, {}, true); continue; }
       e.irDef = def;
       e.scripts = def.scripts || [];
       e.color = def.render ? def.render.color : e.color;
@@ -749,7 +847,7 @@ export class Runtime {
     for (const n of [...this.state.order]) {
       const e = this.state.entities[n];
       if (!e) continue;
-      const proto = e.isClone ? e.cloneOf : n;
+      const proto = e.cloneOf || n;
       if (!alive.has(proto)) this.removeEntity(n);
     }
     for (const [k, v] of Object.entries(project.variables || {})) if (!(k in this.state.vars)) this.state.vars[k] = v;
@@ -833,47 +931,39 @@ export class Runtime {
         if (this._collisionPairs.has(key)) continue;
         this._collisionPairs.add(key);
         seen.add(key);
-        for (const s of this.subscribersOf('_collision')) {
-          const ra = s.a === '$self' ? s.entityName : s.a;
-          const rb = s.b === '$self' ? s.entityName : s.b;
-          if ((ra === a.protoName && rb === b.protoName) || (ra === b.protoName && rb === a.protoName)) {
-            this._fire(s, '_collision', 0, false);
-          }
-        }
+        this.emit('_collision', 0, null, { a: a.protoName, b: b.protoName }, 'collision');
       }
     }
     for (const k of Array.from(this._collisionPairs)) if (!seen.has(k)) this._collisionPairs.delete(k);
   }
 
-  cloneCount() { return this.state.clones.filter((n) => this.state.entities[n]).length; }
+  cloneCount() {
+    return this.state.order.filter((n) => {
+      const e = this.state.entities[n];
+      return e && e.isClone && !e.isPrototypeInstance;
+    }).length;
+  }
+
+  cloneLimit() { return this.settings.cloneLimit || 400; }
 
   clone(ent) {
     if (!ent || !ent.irDef) return;
-    if (this.state.order.length > 400) { this.log(t('克隆体数量已达上限（400）'), 'warn'); return; }
-    const c = this.spawnFromDef(ent.irDef, true, { x: ent.x, y: ent.y, dir: ent.dir, size: ent.size, opacity: ent.opacity });
+    if (this.cloneCount() >= this.cloneLimit()) { this.log(t('克隆体数量已达上限（{_1}）', { _1: this.cloneLimit() }), 'warn'); return; }
+    const c = this.spawnProto(ent.irDef, { x: ent.x, y: ent.y, dir: ent.dir, size: ent.size, opacity: ent.opacity }, false);
+    this.linkParents();
     this.state.clones.push(c.name);
-    const subs = this.subscribersOf('_clone').filter((s) => s.entityName === ent.protoName);
-    for (const s of subs) {
-      const t = { id: ++Runtime._tid, self: c, script: s.script, channel: '_clone', value: 0, state: 'running', suspended: false, ctx: null, sub: s };
-      t.ctx = new Ctx(this, t);
-      this._subscriptions[t.id] = t;
-      const done = () => { t.state = 'done'; delete this._subscriptions[t.id]; };
-      const bad = (e) => {
-        t.state = e instanceof ScriptStop ? 'stopped' : 'error';
-        if (!(e instanceof ScriptStop)) this.log(t('✖ 克隆体 / {_1}: {_2}', { _1: s.entityName, _2: e.message }), 'error');
-        delete this._subscriptions[t.id];
-      };
-      try {
-        const r = this.runSeq(s.script.body, t.ctx);
-        if (r && typeof r.then === 'function') r.then(done, bad);
-        else done();
-      } catch (e) { bad(e); }
-    }
+    // 克隆体启动走总线 lifecycle 相位派发，和点击/销毁统一路径，
+    // 不再手抄一份线程创建逻辑 —— 否则 muted / halted / 时间轴统计都会漏掉。
+    this.emit('_clone', 0, c, { protoName: ent.protoName, clone: c.name }, 'lifecycle');
     return c;
   }
 
   deleteClone(ent) {
-    if (ent) ent.alive = false;
+    if (!ent) return;
+    // 克隆体消亡也走总线，否则清理逻辑没地方挂。
+    // 原型实例不算「克隆体被删除」，所以不发 _destroy。
+    if (ent.isClone && !ent.isPrototypeInstance) this.emit('_destroy', 0, ent, { protoName: ent.protoName, entity: ent.name }, 'lifecycle');
+    ent.alive = false;
   }
 
   removeEntity(name) {
@@ -886,9 +976,7 @@ export class Runtime {
   spawn(name, x, y) {
     const def = (this.project.entities || []).find((d) => d.name === name || d.id === name);
     if (!def) { this.log(t('找不到实体「{name}」', { name }), 'warn'); return null; }
-    const e = this.spawnFromDef(def, false);
-    e.x = x; e.y = y;
-    return e;
+    return this.spawnProto(def, { x, y }, true);
   }
 
   destroy(ent) { if (ent) ent.alive = false; }
@@ -993,13 +1081,14 @@ export class Runtime {
   switchScene(name) {
     const from = this.state.scene;
     this.state.scene = name;
+    this.emit('_scene', 0, null, { from, to: name }, 'lifecycle');
     this.log(t('场景切换 {from} → {name}', { from, name }), 'info');
   }
   saveSlot(slot) {
     const data = { vars: this.state.vars, lists: this.state.lists, scene: this.state.scene, entities: {} };
     for (const n of this.state.order) {
       const e = this.state.entities[n];
-      if (e.isClone) continue;
+      if (!e.isPrototypeInstance) continue;   // 只保存原型实例，不保存运行时克隆体
       data.entities[n] = { x: e.x, y: e.y, vx: e.vx, vy: e.vy, visible: e.visible, size: e.size };
     }
     this.state.saves[slot] = data;
@@ -1037,15 +1126,13 @@ export class Runtime {
   }
   _emitKeyEdges() {
     if (!this.input.pressed.size) return;
-    const subs = this.subscribersOf('_key');
     for (const code of Array.from(this.input.pressed)) {
-      for (const s of subs) {
-        if (s.key === code || s.key === 'any') this._fire(s, '_key', 0, false);
-      }
+      this.emit('_key', 0, null, { key: code }, 'key');
     }
     this.input.pressed.clear();
   }
-  clickAt(x, y) {
+  /** 舞台点击不再帧外直接跑脚本，而是入队到 lifecycle 相位统一派发 */
+  queueClick(x, y) {
     const list = this.state.order.map((n) => this.state.entities[n]).filter((e) => e && e.alive && e.visible);
     for (let i = list.length - 1; i >= 0; i--) {
       const e = list[i];
@@ -1054,33 +1141,19 @@ export class Runtime {
       // 写成 A.t / A.b 会拿到 undefined，比较结果恒为 false ——
       // 那样点舞台上任何角色都不会触发「当被点击」，而界面上完全看不出错。
       if (x >= A.l && x <= A.r && y >= A.bottom && y <= A.top) {
-        const subs = this.subscribersOf('_click');
-        for (const s of subs) {
-          const ra = s.a === '$self' ? s.entityName : s.a;
-          if (ra === e.protoName) this._fire(s, '_click', 0, false);
-        }
+        this.emit('_click', 0, e, { entity: e.protoName }, 'lifecycle');
         return e;
       }
     }
     return null;
   }
 
-  /* ---------------------------------------------------------------- */
-  /* 代码积木                                                          */
-  /* ---------------------------------------------------------------- */
-  evalCode(code, ctx, isExpr) {
-    try {
-      const body = isExpr ? `return (${code});` : code;
-      // eslint-disable-next-line no-new-func
-      const fn = new Function('ctx', 'self', 'vars', 'lists', 'tl', 'frame', 'delta', body);
-      return fn(ctx, ctx.self, this.state.vars, this.state.lists, this.apiFor(ctx), this.frame, this.delta);
-    } catch (err) {
-      this.log(t('代码积木错误：{_1}', { _1: err.message }), 'error');
-      return 0;
-    }
-  }
+  /** 兼容旧调用：仍叫 clickAt，但行为已是入队 */
+  clickAt(x, y) { return this.queueClick(x, y); }
 
-  /** 暴露给代码积木 / 生成代码的 tl 门面 */
+  /* ---------------------------------------------------------------- */
+  /* 生成代码的 tl 门面（给 codegen 产出的脚本用）                     */
+  /* ---------------------------------------------------------------- */
   apiFor(ctx) {
     const rt = this;
     return {

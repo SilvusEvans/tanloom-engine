@@ -15,6 +15,8 @@ export const BLOCKS = {
   '当收到 %1 广播': { en: 'when I receive %1', 'zh-Hant': '當收到 %1 廣播' },
   '当 %1 被点击': { en: 'when %1 clicked', 'zh-Hant': '當 %1 被點擊' },
   '当 %1 碰到 %2': { en: 'when %1 touches %2', 'zh-Hant': '當 %1 碰到 %2' },
+  '当作为克隆体被删除时': { en: 'when this clone is deleted', 'zh-Hant': '當作為分身被刪除時' },
+  '当场景切换时': { en: 'when the scene switches', 'zh-Hant': '當場景切換時' },
   '克隆 %1': { en: 'clone %1', 'zh-Hant': '建立 %1 的分身' },
   '广播 %1 参数 %2': { en: 'broadcast %1 with value %2', 'zh-Hant': '廣播 %1 參數 %2' },
   '将 %1 广播订阅状态设为 %2': {
@@ -75,8 +77,6 @@ export const BLOCKS = {
   '销毁 %1': { en: 'destroy %1', 'zh-Hant': '銷毀 %1' },
   '当前场景名': { en: 'current scene name', 'zh-Hant': '目前場景名稱' },
   '克隆体数量': { en: 'clone count', 'zh-Hant': '分身數量' },
-  '⚙ 执行代码 %1': { en: '⚙ run code %1', 'zh-Hant': '⚙ 執行程式碼 %1' },
-  '⚙ 代码 %1': { en: '⚙ code %1', 'zh-Hant': '⚙ 程式碼 %1' },
   '⚠ 未识别 %1': { en: '⚠ unrecognized %1', 'zh-Hant': '⚠ 未識別 %1' },
 
   // 兜底积木的 tooltip、合成积木的 tooltip
@@ -121,10 +121,6 @@ export const BLOCKS = {
     'zh-Hant': '[積木] 重新整理選擇區失敗',
   },
 
-
-  /* ---- 降级成「执行代码」时留下的注释 ---- */
-  '// 未知积木 {_1}': { en: '// unknown block {_1}', 'zh-Hant': '// 未知積木 {_1}' },
-  '// 无法还原 {_1}': { en: '// cannot restore {_1}', 'zh-Hant': '// 無法還原 {_1}' },
 
   /* ---- 拼进模板串的碎片 ---- */
   "这个分类还是空的": { en: "This category is empty", 'zh-Hant': "這個分類還是空的" },
