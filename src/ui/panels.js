@@ -175,12 +175,47 @@ export function renderConsole(el, rt) {
 /* ================================================================== */
 /* 层级树                                                              */
 /* ================================================================== */
+/* 每个容器的上一次渲染：形状签名 + 行引用。整树重建会重播 .hierarchy > *
+   的逐项入场动画（motion.css 第 4 节），所以树形状没变就别动 DOM ——
+   拖积木、切换选中、改颜色这类高频动作只原地打补丁，列表看着是稳的。 */
+const hierarchyState = new WeakMap();   // el → { shape, rows: Map<entityId, { row, patch }> }
+
 export function renderHierarchy(el, store, rt, onSelect) {
-  el.innerHTML = '';
   const sel = store.selectedEntityId;
-  const sprites = (store.project.entities || []).filter((e) => e.kind === 'sprite');
+  const all = store.project.entities || [];
+  const sprites = all.filter((e) => e.kind === 'sprite');
+  const stages = all.filter((e) => e.kind === 'stage');
   const childrenOf = (name) => sprites.filter((e) => e.parent === name);
   const tops = sprites.filter((e) => !e.parent);
+  const clones = rt.isRunning()
+    ? rt.state.order.map((n) => rt.state.entities[n]).filter((e) => e && e.isClone && !e.isPrototypeInstance)
+    : [];
+
+  // 行模型：顺序 + 层级 + 每行归属的实体。shape 是它的「结构指纹」——
+  // 行内容（名字 / 脚本数 / 颜色）不在里面，那些走原地补丁。
+  const model = [];
+  const walk = (e, depth) => {
+    model.push({ kind: 'row', id: e.id, depth, entity: e });
+    for (const c of childrenOf(e.name)) walk(c, depth + 1);
+  };
+  if (stages.length) { model.push({ kind: 'sec', title: t('舞台') }); for (const e of stages) walk(e, 0); }
+  if (sprites.length) { model.push({ kind: 'sec', title: t('实体') }); for (const e of tops) walk(e, 0); }
+  if (clones.length) model.push({ kind: 'sec', title: t('克隆体（{_1}）', { _1: clones.length }) });
+  const shape = model.map((r) => (r.kind === 'sec' ? `sec:${r.title}` : `row:${r.id}:${r.depth}:${r.entity.kind}`)).join('|');
+
+  const cached = hierarchyState.get(el);
+  if (cached && cached.shape === shape) {
+    // 树没变：只同步每行的内容与选中态（脚本数可能因连接 / 断开而变化）
+    for (const r of model) {
+      if (r.kind !== 'row') continue;
+      const hit = cached.rows.get(r.id);
+      if (hit) hit.patch(r.entity, r.entity.id === sel);
+    }
+    return;
+  }
+
+  el.innerHTML = '';
+  const rowRefs = new Map();
 
   // 拖拽中的源实体 id（HTML5 DnD 在 Electron 里 dataTransfer 偶尔取不到，用模块变量兜底）
   let dragEntId = null;
@@ -189,16 +224,19 @@ export function renderHierarchy(el, store, rt, onSelect) {
       .forEach((n) => n.classList.remove('drop-target', 'drop-invalid', 'dragging'));
   };
 
-  // 拖拽合法性：target 必须是 sprite、不是自己、也不是 src 的后代（防环）
+  // 拖拽合法性：target 必须是 sprite、不是自己、也不是 src 的后代（防环）。
+  // 行是长驻的，所以实体数据一律按 id 现查 —— 别信创建闭包那一刻的快照
+  // （改名、撤销都会让快照过时）。
   const canParent = (srcId, targetId) => {
     if (!srcId || srcId === targetId) return false;
     const src = store.entityById(srcId), tgt = store.entityById(targetId);
     if (!src || !tgt || tgt.kind !== 'sprite') return false;
     const seen = new Set([src.name]);
     const stack = [src.name];
+    const live = store.project.entities || [];
     while (stack.length) {
       const cur = stack.pop();
-      for (const e of sprites) if (e.parent === cur && !seen.has(e.name)) { seen.add(e.name); stack.push(e.name); }
+      for (const e of live) if (e.kind === 'sprite' && e.parent === cur && !seen.has(e.name)) { seen.add(e.name); stack.push(e.name); }
     }
     return !seen.has(tgt.name);
   };
@@ -206,18 +244,29 @@ export function renderHierarchy(el, store, rt, onSelect) {
   // 一行实体；递归渲染它的子级（parent 层级在编辑器里看得见、运行时也认）
   const makeRow = (e, depth) => {
     const row = document.createElement('div');
-    row.className = 'hier-row' + (e.id === sel ? ' active' : '');
+    row.className = 'hier-row';
     row.style.paddingLeft = (8 + depth * 16) + 'px';
     const sw = document.createElement('span');
     sw.className = 'swatch';
-    sw.style.background = (e.render && e.render.color) || '#888';
     const nm = document.createElement('span');
     nm.className = 'n';
-    nm.textContent = `${e.kind === 'stage' ? '🎬 ' : (e.solid ? '🧱 ' : '◆ ')}${e.name}`;
     const sc = document.createElement('span');
     sc.className = 'sc';
-    sc.textContent = `${(e.scripts || []).length}`;
     row.append(sw, nm, sc);
+    // 先比再写：textContent 赋值会换掉文本节点，就算值没变也算一次 DOM 变更。
+    // swatch 记原始色值再比 —— style.background 读回来是归一化过的格式。
+    let lastBg = null;
+    const patch = (entity, active) => {
+      const bg = (entity.render && entity.render.color) || '#888';
+      if (lastBg !== bg) { lastBg = bg; sw.style.background = bg; }
+      const name = `${entity.kind === 'stage' ? '🎬 ' : (entity.solid ? '🧱 ' : '◆ ')}${entity.name}`;
+      if (nm.textContent !== name) nm.textContent = name;
+      const count = `${(entity.scripts || []).length}`;
+      if (sc.textContent !== count) sc.textContent = count;
+      if (row.classList.contains('active') !== active) row.classList.toggle('active', active);
+    };
+    patch(e, e.id === sel);
+    rowRefs.set(e.id, { row, patch });
     // 删除入口：悬停才露出 ✕（舞台不给删，和属性检查器保持一致）
     if (e.kind !== 'stage') {
       const del = document.createElement('button');
@@ -250,7 +299,8 @@ export function renderHierarchy(el, store, rt, onSelect) {
       row.addEventListener('drop', (ev) => {
         ev.preventDefault();
         row.classList.remove('drop-target', 'drop-invalid');
-        if (canParent(dragEntId, e.id)) store.setEntityParent(dragEntId, e.name);
+        const target = store.entityById(e.id);
+        if (target && canParent(dragEntId, e.id)) store.setEntityParent(dragEntId, target.name);
       });
     }
     row.addEventListener('click', () => onSelect(e.id));
@@ -259,7 +309,7 @@ export function renderHierarchy(el, store, rt, onSelect) {
   };
 
   for (const g of [
-    { title: t('舞台'), items: (store.project.entities || []).filter((e) => e.kind === 'stage'), detach: false },
+    { title: t('舞台'), items: stages, detach: false },
     { title: t('实体'), items: tops, detach: true },
   ]) {
     // 「实体」分组始终渲染（只要有 sprite），这样即使所有实体都挂了父级，
@@ -288,15 +338,14 @@ export function renderHierarchy(el, store, rt, onSelect) {
   }
 
   // 克隆体
-  if (rt.isRunning()) {
-    const clones = rt.state.order.map((n) => rt.state.entities[n]).filter((e) => e && e.isClone && !e.isPrototypeInstance);
-    if (clones.length) {
-      const sec = document.createElement('div');
-      sec.className = 'palette-sec';
-      sec.textContent = t('克隆体（{_1}）', { _1: clones.length });
-      el.appendChild(sec);
-    }
+  if (clones.length) {
+    const sec = document.createElement('div');
+    sec.className = 'palette-sec';
+    sec.textContent = t('克隆体（{_1}）', { _1: clones.length });
+    el.appendChild(sec);
   }
+
+  hierarchyState.set(el, { shape, rows: rowRefs });
 }
 
 /* ================================================================== */

@@ -392,15 +392,23 @@ export class ScratchWorkspace {
     const ent = this.store.entityById(this.currentEntityId);
     if (!ent) return;
     const { scripts, scriptPos } = this.collectScripts();
-    const same = JSON.stringify({ s: ent.scripts, p: ent.scriptPos }) === JSON.stringify({ s: scripts, p: scriptPos });
-    if (same) return;
+    const scriptsSame = JSON.stringify(ent.scripts) === JSON.stringify(scripts);
+    const posSame = JSON.stringify(ent.scriptPos || {}) === JSON.stringify(scriptPos);
+    if (scriptsSame && posSame) return;
 
     ent.scripts = scripts;
     ent.scriptPos = scriptPos;
     this._lastSignature = this._signature(ent);
-    this.store.commit(t('编辑积木'), null, { reason: 'blocks-ui' });
     // 撤销统一由 store 负责：Blockly 自己的栈留着只会和 Ctrl+Z 打架
     try { this.ws.clearUndo(); } catch { /* ignore */ }
+
+    // 只是把积木挪了位置：坐标当然要存下来（重开画布得在原处），但这不算一次
+    // 「编辑」—— 不进撤销栈、不广播变更。否则每拖一下积木，store 变更都会让
+    // 层级列表等面板整树重建一次（.hierarchy 的逐项入场动画整体重播，看起来
+    // 就是「每动一次积木，层级列表就刷新」）。
+    if (scriptsSame) return;
+
+    this.store.commit(t('编辑积木'), null, { reason: 'blocks-ui' });
     if (this.opts.onChange) this.opts.onChange();
   }
 

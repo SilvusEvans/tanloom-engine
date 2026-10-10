@@ -11,6 +11,7 @@
     "audit": "node tools/audit-correspondence.mjs",
     "smoke": "node tools/electron.cjs tools/smoke.cjs",
     "ui": "node tools/electron.cjs tools/probe-ui.cjs",
+    "hierarchy": "node tools/electron.cjs tools/probe-hierarchy.cjs",
     "bubble": "node tools/electron.cjs tools/probe-bubble.cjs",
     "player": "node tools/electron.cjs tools/probe-player.cjs",
     "theme": "node tools/electron.cjs tools/probe-theme.cjs",
