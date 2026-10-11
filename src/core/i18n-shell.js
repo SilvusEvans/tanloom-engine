@@ -55,8 +55,6 @@ export const SHELL = {
     en: 'Downloaded {files.length} files',
     'zh-Hant': '已下載 {files.length} 個檔案',
   },
-  '帮助 · Tanloom Engine': { en: 'Help · Tanloom Engine', 'zh-Hant': '說明 · Tanloom Engine' },
-  '知道了': { en: 'Got it', 'zh-Hant': '知道了' },
   '关闭': { en: 'Close', 'zh-Hant': '關閉' },
   'Tanloom Engine 已就绪 · 点 ▶ 运行示例项目': {
     en: 'Tanloom Engine is ready · click ▶ to run the sample project',

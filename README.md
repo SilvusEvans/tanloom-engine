@@ -39,10 +39,10 @@ npm start            # launch the editor
 | `npm run i18n` | i18n only: missing translations, placeholder parity, dropdown coverage |
 | `npm run audit` | Per-block round trip: IR → code → IR for every block × every option value |
 | `npm run smoke` | 53 assertions in a real Electron window, zero console errors, saves screenshots |
-| `npm run ui` | 11 UI flow tests (click real buttons, fill real forms, real right-click) |
+| `npm run ui` | 20 UI flow tests (click real buttons, fill real forms, real right-click) |
 | `npm run bubble` | 21 value-bubble checks (official look, positioning, click-to-evaluate) |
 | `npm run player` | 18 checks on the separate player window (cross-process, end to end) |
-| `npm run theme` | 38 appearance checks (theme / accent / fonts / sizes / share code) |
+| `npm run theme` | 63 appearance checks (theme / accent / fonts / sizes / share code) |
 | `npm run gallery` | Render every block once into a single overview PNG |
 
 Requirements: Node 22+, a desktop environment. The editor loads its own resources over a custom
@@ -98,15 +98,17 @@ swallow the click — only genuinely editable fields do.
 
 ### 7. Keyboard, fullscreen, player window
 
-Real keys are wired to the runtime (<kbd>F5</kbd> run/stop, <kbd>F6</kbd> run in a separate window,
-<kbd>F11</kbd> fullscreen, <kbd>Esc</kbd> leave). In fullscreen the keyboard belongs to the game: arrow keys
-do not scroll and space does not press buttons. The player window runs a second runtime in its own process and
-hot-reloads when you edit blocks in the editor.
+Real keys are wired to the runtime (<kbd>F5</kbd> run/stop — the same key or the ▶ button opens and closes a
+separate run window). Fullscreen lives in that window: click ⛶ there to drop the window frame and press
+<kbd>Esc</kbd> to leave; while it is open the keyboard belongs to the game — arrow keys do not scroll and
+space does not press buttons. The player window runs a second runtime in its own process and hot-reloads when
+you edit blocks in the editor.
 
 ### 8. Appearance
 
-6 themes (plus follow-system), an accent colour (8 presets or any colour from the picker, with the label colour
-chosen automatically by brightness), and separate fonts and sizes for the interface and for code — compiled
+9 themes (three of them Material You variants computed from a seed colour, plus follow-system), an accent colour
+(8 presets or any colour from the picker, with the label colour chosen automatically by brightness), and
+separate fonts and sizes for the interface and for code — compiled
 into one `:root` variable block with a live preview. Appearance is stored per machine and **never written into
 the project file**: the same game can be skinned differently on every machine. A share code passes a whole look
 on to someone else.
@@ -116,7 +118,7 @@ on to someone else.
 ## Language
 
 Three interface languages — **English (default and fallback)** · 简体中文 · 繁體中文 — under
-**◐ Appearance → Interface language**. Everything is covered: panels, dialogs, help, the text on custom blocks,
+**⚙ Settings → Interface language**. Everything is covered: panels, dialogs, the help page, the text on custom blocks,
 and the text of the native Scratch blocks (scratch-blocks ships 79 locales; we point
 `Blockly.ScratchMsgs.setLocale` at the matching one).
 
@@ -137,10 +139,10 @@ generates identical code in every language. Only display names move.
 - **nothing untranslated** — every Chinese string in an interface source file is either wrapped in `t()` and
   present in the dictionary, or on the "this is data" allow-list. The nastiest bug class is *present in the
   dictionary but never wrapped* — it shows Chinese in the English UI, and this assertion exists to catch it;
-- **dictionaries complete** — 439 keys × 2 languages (Simplified Chinese *is* the key); one missing and it fails;
+- **dictionaries complete** — 465 keys × 2 languages (Simplified Chinese *is* the key); one missing and it fails;
 - **placeholders match** — the number of `{x}` / `%1` markers in a key and in each translation must agree;
 - **dropdowns covered** — every value of every dropdown list resolves in `i18n-options.js`;
-- **help dialog present in all three languages**.
+- **help page present in all three languages** (the Help tab of the settings dialog).
 
 Files: `core/i18n.js` (the engine: detection, `t()`, `opt()`, `setLang()`), `i18n-ui.js`, `i18n-shell.js`,
 `i18n-blocks.js`, `i18n-msg.js`, `i18n-tpl.js` (messages with slots), `i18n-options.js` (dropdown labels keyed
@@ -175,13 +177,13 @@ Seven suites, each with a different job — and each one exists because somethin
 
 | Suite | Items | Why it is separate |
 |---|---|---|
-| `npm test` | 92 + 5 | Pure Node, seconds. Definition-table self-checks, every block round trip, i18n |
+| `npm test` | 129 + 7 | Pure Node, seconds. Definition-table self-checks, every block round trip, i18n |
 | `npm run audit` | 162 | Every block × every dropdown value, node for node — the thorough version of the same idea |
 | `npm run smoke` | 53 | Real Electron, zero console errors, screenshots. Catches "works in Node, breaks in the renderer" |
-| `npm run ui` | 11 | Real clicks, real forms, real right-click — the flows a user actually performs |
+| `npm run ui` | 20 | Real clicks, real forms, real right-click — the flows a user actually performs |
 | `npm run bubble` | 21 | The value bubble: official colours, arrow, positioning, and that clicking label text still evaluates |
 | `npm run player` | 18 | Cross-process: opens the player window and reads its internal state from the test |
-| `npm run theme` | 38 | Asserts **computed styles**, not "we called the setter" |
+| `npm run theme` | 63 | Asserts **computed styles**, not "we called the setter" |
 
 Two habits that came out of real bugs:
 

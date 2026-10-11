@@ -15,7 +15,7 @@
  * 否则换主题 / 调字号时会留下一块没跟上的旧样式。
  */
 
-import { t, lang, setLang, LANGS } from '../core/i18n.js';
+import { t, lang, setLang, LANGS, helpHtml } from '../core/i18n.js';
 import { BUILTIN_CATEGORIES, categoryLabel } from '../core/registry.js';
 import { showModal, hint, toast } from './dialogs.js';
 import { highlight } from '../code/editor.js';
@@ -726,8 +726,45 @@ function swatchStrip(v) {
 }
 
 export function openSettingsDialog(app) {
+  // 一个对话框两页：「设置」管外观，「帮助」读说明 —— 页签竖排在左，当前页在右。
+  // 帮助正文是整段 HTML（见 i18n-help.js），直接 innerHTML 进隐藏页，
+  // 切页只换 class，不重建 DOM。
+  const wrap = document.createElement('div');
+  wrap.className = 'ap-wrap';
+  const tabs = document.createElement('div');
+  tabs.className = 'ap-tabs';
+  const tabApp = document.createElement('button');
+  tabApp.className = 'ap-tab on';
+  tabApp.textContent = t('设置');
+  const tabHelp = document.createElement('button');
+  tabHelp.className = 'ap-tab';
+  tabHelp.textContent = t('帮助');
+  tabs.append(tabApp, tabHelp);
+
   const body = document.createElement('div');
   body.className = 'ap-body';
+  const helpPane = document.createElement('div');
+  helpPane.className = 'ap-help hidden';
+  helpPane.innerHTML = helpHtml();
+
+  const panes = document.createElement('div');
+  panes.className = 'ap-panes';
+  panes.append(body, helpPane);
+
+  wrap.append(tabs, panes);
+
+  // 帮助页上把「恢复默认」收起来：它只对设置页有意义，免得读着说明误点重置外观
+  const showPage = (onHelp) => {
+    tabApp.classList.toggle('on', !onHelp);
+    tabHelp.classList.toggle('on', onHelp);
+    body.classList.toggle('hidden', onHelp);
+    helpPane.classList.toggle('hidden', !onHelp);
+    const modalEl = wrap.closest('.modal');
+    const resetBtn = modalEl ? modalEl.querySelector('.foot .primary') : null;
+    if (resetBtn) resetBtn.style.display = onHelp ? 'none' : '';
+  };
+  tabApp.addEventListener('click', () => showPage(false));
+  tabHelp.addEventListener('click', () => showPage(true));
 
   /* --- 主题 --- */
   const tSec = document.createElement('div');
@@ -952,7 +989,7 @@ export function openSettingsDialog(app) {
   let off = null;
   return showModal({
     title: t('设置 · 编辑器'),
-    body,
+    body: wrap,
     width: 600,
     cancelText: t('完成'),
     okText: t('恢复默认'),

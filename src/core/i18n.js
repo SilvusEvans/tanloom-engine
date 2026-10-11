@@ -154,7 +154,7 @@ export function scratchLocale() {
   return (hit && hit.scratch) || 'en';
 }
 
-/** 帮助对话框正文（按语言直接取，不走「原文当键」那套，见 i18n-help.js） */
+/** 「帮助」页正文（设置对话框里的那一页；按语言直接取，不走「原文当键」那套，见 i18n-help.js） */
 export function helpHtml() {
   return HELP[lang] || HELP[DEFAULT_LANG];
 }

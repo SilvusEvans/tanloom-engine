@@ -235,8 +235,8 @@ const missingCat = BUILTIN_CATEGORIES
 ok(missingCat.length === 0,
   missingCat.length ? `内置分类缺译名：${missingCat.join('、')}` : `${BUILTIN_CATEGORIES.length} 个内置分类都有译名（用户改过名的分类照原样显示）`);
 
-/* ---------------- 5. 帮助对话框三语齐全 ---------------- */
-console.log('\n=== 5. 帮助对话框三种语言都在 ===');
+/* ---------------- 5. 帮助页三语齐全 ---------------- */
+console.log('\n=== 5. 帮助页三种语言都在 ===');
 const helpLangs = Object.keys(HELP);
 ok(helpLangs.length === 3 && helpLangs.every((l) => HELP[l] && HELP[l].includes('<div class="hint">')),
   `HELP 里有：${helpLangs.join(' / ')}`);

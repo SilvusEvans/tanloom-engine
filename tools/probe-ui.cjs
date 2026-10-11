@@ -296,6 +296,86 @@ app.whenReady().then(async () => {
   check('Ctrl+Z 撤销能把它找回来',
     !del.err && del.back, del.err || '撤销后金币还在吗：' + del.back);
 
+  console.log('\n=== 设置与帮助：帮助融进设置对话框 ===');
+  const help = await run(`(async () => {
+    document.querySelectorAll('.modal-back').forEach(e => e.remove());
+    // 顶栏不该再有独立的 ? 按钮 —— 帮助入口只在设置对话框里
+    const stray = document.querySelector('#btn-help');
+    document.querySelector('#btn-settings').click();
+    await new Promise(r => setTimeout(r, 260));
+    const modal = document.querySelector('.modal-back');
+    if (!modal) return { err: '点了「设置」但没弹对话框' };
+    const tabs = [...modal.querySelectorAll('.ap-tab')];
+    const pane = modal.querySelector('.ap-help');
+    const body = modal.querySelector('.ap-body');
+    if (!pane || !body) return { err: '设置对话框里没有「帮助」页容器' };
+    const snap = () => ({
+      on: tabs.filter(b => b.classList.contains('on')).map(b => b.textContent.trim()),
+      helpHidden: pane.classList.contains('hidden'),
+      bodyHidden: body.classList.contains('hidden'),
+    });
+    const resetBtn = modal.querySelector('.foot .primary');
+    const resetShown = () => (resetBtn ? resetBtn.style.display !== 'none' : null);
+    const before = { ...snap(), reset: resetShown() };
+    const helpTab = tabs.find(b => b.textContent.trim() === '帮助');
+    if (!helpTab) return { err: '没有「帮助」页签：' + JSON.stringify(tabs.map(b => b.textContent.trim())) };
+    helpTab.click();
+    await new Promise(r => setTimeout(r, 160));
+    const after = { ...snap(), reset: resetShown() };
+    const text = pane.textContent;
+    const appTab = tabs.find(b => b.textContent.trim() === '设置');
+    appTab.click();
+    await new Promise(r => setTimeout(r, 160));
+    const back = { ...snap(), reset: resetShown() };
+    // 布局：页签竖排在左，内容在右（量的是实际几何，不是看类名）
+    const rr = modal.querySelector('.ap-tabs').getBoundingClientRect();
+    const pr = modal.querySelector('.ap-panes').getBoundingClientRect();
+    const r0 = tabs[0].getBoundingClientRect();
+    const r1 = tabs[1].getBoundingClientRect();
+    const layout = {
+      railRight: Math.round(rr.right), contentLeft: Math.round(pr.left),
+      stacked: r1.top >= r0.bottom - 1, sameLeft: Math.abs(r0.left - r1.left) <= 2,
+    };
+    // 滚到底：页签还贴在滚动区顶部（sticky）—— 不然长设置 / 长帮助滚下去就切不回另一页
+    // 注意滚动的是里面那层 .modal（.modal-back 是固定不滚的遮罩）
+    const box = modal.querySelector('.modal');
+    const canScroll = box.scrollHeight > box.clientHeight + 20;
+    box.scrollTop = box.scrollHeight;
+    await new Promise(r => setTimeout(r, 120));
+    const mt = Math.round(box.getBoundingClientRect().top);
+    const st = Math.round(tabs[0].getBoundingClientRect().top);   // 「设置」这颗的实际位置
+    box.scrollTop = 0;
+    const sticky = { canScroll, ok: st >= mt - 2 && st <= mt + 26, top: st, modalTop: mt };
+    document.querySelectorAll('.modal-back').forEach(e => e.remove());
+    return {
+      stray: !!stray, tabs: tabs.map(b => b.textContent.trim()),
+      before, after, back, layout, sticky,
+      textOk: text.includes('Tanloom Engine') && text.length > 300,
+    };
+  })()`);
+  check('顶栏不再单开 ? 按钮（帮助入口只在设置里）',
+    !help.err && help.stray === false, help.err || `#btn-help 存在=${help.stray}`);
+  check('设置对话框是「设置 / 帮助」两页，默认停在「设置」',
+    !help.err && help.tabs && help.tabs.length === 2
+      && help.before.on.length === 1 && help.before.on[0] === '设置'
+      && help.before.helpHidden === true && help.before.bodyHidden === false,
+    help.err || `页签=${JSON.stringify(help.tabs)} 选中=${JSON.stringify(help.before && help.before.on)}`);
+  check('点「帮助」页签：正文出现、设置页收起、「恢复默认」收走',
+    !help.err && help.after.helpHidden === false && help.after.bodyHidden === true
+      && help.textOk && help.after.reset === false,
+    help.err || `帮助可见=${!help.after.helpHidden} 设置收起=${help.after.bodyHidden} 有正文=${help.textOk} 恢复默认可见=${help.after.reset}`);
+  check('切回「设置」页：外观选项回来、「恢复默认」也回来',
+    !help.err && help.back.helpHidden === true && help.back.bodyHidden === false
+      && help.back.on[0] === '设置' && help.back.reset === true,
+    help.err || `帮助收起=${help.back.helpHidden} 设置可见=${!help.back.bodyHidden} 恢复默认可见=${help.back.reset}`);
+  check('页签竖排在左侧、内容在右侧（左侧标签页布局）',
+    !help.err && !!help.layout && help.layout.railRight <= help.layout.contentLeft + 1
+      && help.layout.stacked && help.layout.sameLeft,
+    help.err || `页签右缘=${help.layout && help.layout.railRight} ≤ 内容左缘=${help.layout && help.layout.contentLeft}｜竖排=${help.layout && help.layout.stacked}｜同列=${help.layout && help.layout.sameLeft}`);
+  check('内容滚到底时页签仍贴在顶部（长设置 / 长帮助不丢导航）',
+    !help.err && !!help.sticky && help.sticky.canScroll && help.sticky.ok,
+    help.err || `可滚动=${help.sticky && help.sticky.canScroll}｜页签顶=${help.sticky && help.sticky.top} · 对话框顶=${help.sticky && help.sticky.modalTop}`);
+
   console.log('\n=== 页面错误 ===');
   const errs = pageErrors.filter((m) => /uncaught|Invalid|violat|TypeError|Cannot read|before initialization/i.test(m));
   if (errs.length) errs.slice(0, 12).forEach((m) => console.log('  ' + m));

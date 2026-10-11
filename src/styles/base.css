@@ -360,6 +360,15 @@ select { padding: 4px 6px; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 
 /* ---- 外观对话框（主题 / 字体） ---- */
+/* 「设置 / 帮助」：页签竖排在左（导航），当前页内容在右 */
+.ap-wrap { display: grid; grid-template-columns: max-content 1fr; gap: 16px; align-items: start; }
+/* 滚长内容时页签贴住顶部（负 margin 抵消 padding，静止时仍与内容顶对齐） */
+.ap-tabs { display: flex; flex-direction: column; gap: 6px; min-width: 84px; position: sticky; top: 0; background: var(--modal-bg); padding: 10px 0; margin: -10px 0; }
+.ap-tab { font-size: calc(12px * var(--ui-scale)); padding: 5px 14px; border-radius: var(--r-pill); text-align: left; }
+.ap-tab.on { border-color: var(--accent); color: var(--accent); }
+.ap-panes { min-width: 0; }
+/* 帮助是一整页说明：正文放大一档、不再用弱化的提示色 */
+.ap-help .hint { font-size: calc(12px * var(--ui-scale)); color: var(--text-dim); }
 .ap-body { display: grid; gap: 15px; }
 .ap-section { display: grid; gap: 7px; }
 .ap-label { font-size: calc(11px * var(--ui-scale)); letter-spacing: .6px; color: var(--text-mute); }

@@ -319,9 +319,9 @@ export const UI = {
   },
   '设置 · 编辑器': { en: 'Settings · Editor', 'zh-Hant': '設定 · 編輯器' },
   '设置': { en: 'Settings', 'zh-Hant': '設定' },
-  '设置：主题 / 字体 / 语言 / 积木与代码 (Ctrl+,)': {
-    en: 'Settings: theme / fonts / language / blocks & code (Ctrl+,)',
-    'zh-Hant': '設定：主題 / 字型 / 語言 / 積木與程式碼 (Ctrl+,)',
+  '设置与帮助：主题 / 字体 / 语言 / 积木与代码 (Ctrl+,)': {
+    en: 'Settings & help: theme / fonts / language / blocks & code (Ctrl+,)',
+    'zh-Hant': '設定與說明：主題 / 字型 / 語言 / 積木與程式碼 (Ctrl+,)',
   },
 
   /* ---- 编辑区主题：积木画布与代码区共用的一套配色 ---- */

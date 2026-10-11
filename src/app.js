@@ -5,7 +5,7 @@
  * 任何一处修改都只改 IR，然后由 store 广播变更，各视图重新投影。
  */
 
-import { t, helpHtml, localizeDom, lang, setLang, LANGS } from './core/i18n.js';
+import { t, localizeDom, lang, setLang, LANGS } from './core/i18n.js';
 import { Store } from './core/store.js';
 import { createTemplateProject } from './core/template.js';
 import { Runtime, attachDefs } from './runtime/vm.js';
@@ -18,7 +18,7 @@ import { StageView } from './scene/viewport.js';
 import { CodeEditor } from './code/editor.js';
 import { renderBroadcast, renderSubscribers, renderVars, renderPerf, renderConsole, renderHierarchy, renderInspector, renderAssets } from './ui/panels.js';
 import { openCategoryDialog } from './ui/macro-dialog.js';
-import { showModal, toast, hint, showInlineInput } from './ui/dialogs.js';
+import { toast, showInlineInput } from './ui/dialogs.js';
 import { Appearance, openSettingsDialog } from './ui/appearance.js';
 import { installMotion, playAxisY, setMotion, motionEnabled } from './ui/motion.js';
 import { generateFiles } from './core/codegen.js';
@@ -465,17 +465,9 @@ function pickFile() {
 /* ================================================================== */
 /* 设置（外观：主题 / 重点色 / 字体 / 语言 / 代码区）                    */
 /* ================================================================== */
-/** 「设置」对话框：顶栏按钮和 Ctrl+, 都走这里 */
+/** 「设置」对话框：顶栏按钮和 Ctrl+, 都走这里。帮助也在这个对话框里（「帮助」页），
+    顶栏不再单开 ? 按钮。 */
 function openSettings() { openSettingsDialog(appearance); }
-
-/* ================================================================== */
-/* 帮助                                                                */
-/* ================================================================== */
-$('btn-help').addEventListener('click', () => {
-  const body = document.createElement('div');
-  body.innerHTML = helpHtml();
-  showModal({ title: t('帮助 · Tanloom Engine'), body, okText: t('知道了'), cancelText: t('关闭') });
-});
 
 document.addEventListener('keydown', (e) => {
   // 在输入框里打字时完全不介入（含 Blockly 的字段编辑框、对话框里的输入）
